@@ -295,7 +295,7 @@ def create_server() -> Server:
                         "audio_path": {"type": "string", "description": "Path to audio file"},
                         "transcription_path": {"type": "string", "description": "Path to MIDI transcription from note_transcribe"},
                         "note_indices": {"type": "array", "items": {"type": "integer"}, "description": "Indices of notes to isolate"},
-                        "assess_quality": {"type": "boolean", "description": "Run effects/distortion triage (default: true)"},
+                        "assess_quality": {"type": "boolean", "default": true, "description": "Run effects/distortion triage"},
                     },
                     "required": ["audio_path", "transcription_path", "note_indices"],
                 },
