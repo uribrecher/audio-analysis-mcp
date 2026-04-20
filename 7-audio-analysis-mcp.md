@@ -44,16 +44,34 @@ This is fully self-supervised — the synth itself is the ground truth.
 
 ### One model per synth type
 
-Different synthesis types have fundamentally different parameter spaces and audio characteristics. A model trained on subtractive synthesis won't generalize to FM or sample-based. We need:
+Different synthesis types have fundamentally different parameter spaces and audio characteristics. A model trained on subtractive synthesis won't generalize to FM or organ. We train inverse models only for **synthesized** sound categories:
+
+#### Inverse synthesis candidates (trainable)
 
 | Synthesis type | Example hardware | Parameter space character |
 |---------------|-----------------|--------------------------|
-| Subtractive | Prophet-6, Moog, Juno | Oscillator shapes, filter cutoff/resonance, envelopes |
+| Subtractive | Prophet-6, Moog, JUNO-106/60 | Oscillator shapes, filter cutoff/resonance, envelopes |
 | FM | DX7, FM8 | Operator ratios, modulation indices, algorithms |
-| Additive/Organ | Hammond B3, drawbar organs | Drawbar levels, percussion, vibrato/chorus |
-| Sample-based | Nord piano/sample engine | Sample selection, EQ, effects (smaller param space) |
+| Organ (drawbar/additive) | Hammond B3, Nord Organ engine | Drawbar levels, percussion, vibrato/chorus, rotary speed |
+| Wavetable | PPG Wave, Waldorf | Wavetable position, modulation sources, filter |
 
 Each model learns the specific `f⁻¹` for its synthesis type. Could potentially fine-tune per specific synth model (e.g., Prophet-6 vs Moog Sub 37).
+
+#### NOT inverse synthesis candidates (preset/sample matching only)
+
+Acoustic and electro-mechanical keyboard instruments are reproduced via **sample playback engines** — recordings of real instruments at multiple velocities/pitches, plus effects modeling. There is no synthesizable parameter vector to predict.
+
+| Instrument category | Sound generation mechanism | Reproduction strategy |
+|-------------------|--------------------------|----------------------|
+| **Acoustic piano** | Felt hammers strike metal strings; resonance box + soundboard | Dedicated piano engine (Nord Piano, Roland RD Piano); match sample set + adjust EQ/resonance |
+| **Harpsichord** | Strings plucked by quills; no velocity control | Piano/sample engine; select harpsichord sample set |
+| **Clavinet** | Rubber hammers strike strings; piezo pickups per string group | Piano/EP engine; select clavinet sample + dial in pickup model and wah/phaser effects |
+| **Fender Rhodes** | Metal tines + tonebars; piezo pickup per tine | Piano/EP engine (Nord Piano, Roland RD Piano); select Rhodes sample + amp/tremolo/chorus |
+| **Wurlitzer** | Metal reeds; piezo pickup per reed | Piano/EP engine; select Wurlitzer sample + overdrive/tremolo |
+
+**Key insight:** For electro-mechanical instruments (Rhodes, Wurlitzer, Clavinet), the **pickup/amp modeling and effects chain** are often more important to the final sound than the base sample. Modern keyboard engines (Nord Piano, Roland RD Piano) include dedicated controls for these.
+
+Different keyboard manufacturers have their own piano/EP/organ engine implementations — Yamaha, Roland, Korg, Nord all approach sample playback and modeling differently. Use `list_synth_engines` (keyboards-mcp) to discover which engines a connected device supports.
 
 ## Decision: Pure Python
 
@@ -79,6 +97,8 @@ audio-analysis-mcp/
         spectrum_analyze.py            # Spectral feature extraction
         audio_compare.py               # A/B spectral diff (fallback for untrained synths)
         audio_render.py                # Capture audio from system device
+        note_transcribe.py             # Polyphonic transcription via Basic Pitch
+        note_isolate.py                # Score-informed source separation via nussl
         inverse_synth.py               # ML-based param prediction
         train_model.py                 # Generate dataset + train inverse model
         list_models.py                 # List available trained models
@@ -86,6 +106,8 @@ audio-analysis-mcp/
         __init__.py
         spectral.py                    # Librosa-based feature extraction
         comparison.py                  # A/B spectral diff
+        transcription.py               # Basic Pitch polyphonic transcription + polyphony profiling
+        note_isolation.py              # nussl time-frequency masking + quality assessment
       models/
         __init__.py
         architecture.py               # Shared encoder architecture (ResNet/CNN backbone + MLP heads)
@@ -130,6 +152,8 @@ dependencies = [
   "soundfile>=0.12",       # WAV I/O
   "sounddevice>=0.4",      # Audio capture
   "yt-dlp>=2024.0",        # YouTube download
+  "basic-pitch>=0.3.0",    # Polyphonic transcription (Spotify, MIT license)
+  "nussl>=1.1.0",          # Score-informed source separation (time-frequency masking)
   "pydantic>=2.0",         # Structured output schemas
 ]
 ```
@@ -198,9 +222,110 @@ A/B spectral diff — fallback for iterative matching when no trained model exis
 
 **Returns:** Similarity scores, frequency band diffs, prioritized action items (JSON).
 
+### Note-Level Extraction Tools (Score-Informed Source Separation)
+
+These tools extract clean, individual notes from polyphonic keyboard stems. They sit between stem separation and inverse synthesis — producing single-note audio that is far more reliable input for synthesis detection and parameter prediction.
+
+#### 6. `note_transcribe`
+
+Polyphonic transcription using **Spotify Basic Pitch** (open source, MIT). Extracts MIDI note events (pitch, onset, offset, velocity) from a polyphonic audio stem. Also computes a polyphony profile — how many notes overlap at each point in time.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| audio_path | string | yes | Path to audio file (typically the "other" keyboard stem) |
+
+**Returns:**
+
+```json
+{
+  "midi_path": "{workspace}/transcriptions/other_transcription.mid",
+  "note_events": [
+    {"index": 0, "pitch_midi": 60, "onset_sec": 0.12, "offset_sec": 0.85, "velocity": 92, "polyphony_at_onset": 1},
+    {"index": 1, "pitch_midi": 64, "onset_sec": 0.50, "offset_sec": 1.20, "velocity": 87, "polyphony_at_onset": 2},
+    ...
+  ],
+  "polyphony_profile": {
+    "max_polyphony": 6,
+    "monophonic_windows": [{"start": 0.0, "end": 0.49}, ...],
+    "low_polyphony_windows": [{"start": 2.1, "end": 3.4, "max_voices": 2}, ...],
+    "high_polyphony_windows": [{"start": 5.0, "end": 8.2, "max_voices": 6}, ...]
+  },
+  "candidate_notes": [3, 7, 12, 18, 25],
+  "candidate_selection_criteria": "monophonic or low-polyphony, duration > 0.5s, spread across pitch range"
+}
+```
+
+The `candidate_notes` field pre-selects the best notes for isolation based on:
+- Monophonic or low-polyphony windows (cleanest signal)
+- Sufficient duration (> 0.5s) to capture full ADSR envelope
+- Temporal isolation (minimal overlap with adjacent notes)
+- Pitch range spread (capture timbre at different registers)
+
+#### 7. `note_isolate`
+
+Score-informed source separation using **nussl** time-frequency masking. Uses the MIDI transcription to guide a soft mask in the STFT domain, isolating individual notes from the polyphonic mix. For monophonic windows, uses simple time-slice extraction (no masking needed).
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| audio_path | string | yes | Path to audio file |
+| transcription_path | string | yes | Path to MIDI transcription from `note_transcribe` |
+| note_indices | int[] | yes | Indices of notes to isolate (from `note_events`) |
+| assess_quality | bool | no | Run effects/distortion triage on each note (default: true) |
+
+**Returns:**
+
+```json
+{
+  "isolated_notes": [
+    {
+      "index": 3,
+      "path": "{workspace}/isolated_notes/note_003.wav",
+      "pitch_midi": 67,
+      "duration_sec": 1.2,
+      "isolation_method": "time_slice",
+      "quality_score": 0.92,
+      "detected_effects": [],
+      "usable": true
+    },
+    {
+      "index": 7,
+      "path": "{workspace}/isolated_notes/note_007.wav",
+      "pitch_midi": 72,
+      "duration_sec": 0.8,
+      "isolation_method": "nussl_tf_mask",
+      "quality_score": 0.78,
+      "detected_effects": ["reverb"],
+      "usable": true
+    },
+    {
+      "index": 12,
+      "path": "{workspace}/isolated_notes/note_012.wav",
+      "pitch_midi": 55,
+      "duration_sec": 0.6,
+      "isolation_method": "nussl_tf_mask",
+      "quality_score": 0.31,
+      "detected_effects": ["heavy_distortion"],
+      "usable": false,
+      "reason": "Heavy distortion — non-invertible; skip for inverse synthesis"
+    }
+  ],
+  "recommended_for_analysis": [3, 7]
+}
+```
+
+**Quality assessment** (when `assess_quality=true`):
+
+| Condition | Detection | Action |
+|-----------|----------|--------|
+| Clean | Clear harmonics, low spectral spread | Best candidates — use directly |
+| Reverb/delay | Energy after note-off, comb-filter signatures | Usable if attack transient is clean |
+| Chorus/modulation | Spectral smearing, beating | Usable — note the modulation rate |
+| Heavy distortion | Dense inharmonic partials, intermodulation | **Flag unusable** — distortion is non-invertible |
+| Masking artifacts | Phase cancellation, hollow sound | Discard — try a different note |
+
 ### Inverse Synthesis Tools
 
-#### 6. `inverse_synth`
+#### 8. `inverse_synth`
 
 **The core tool.** Given audio and a target synthesis type, predict a raw parameter vector.
 
@@ -241,7 +366,7 @@ A/B spectral diff — fallback for iterative matching when no trained model exis
 4. Return as-is — scaling to device-specific ranges happens downstream
 5. Optionally return multiple predictions if `top_k > 1` (useful when the many-to-one problem means multiple param combos could match)
 
-#### 7. `train_model`
+#### 9. `train_model`
 
 Generate training data and train (or fine-tune) an inverse model for a synthesis type.
 
@@ -283,7 +408,7 @@ Each param vector should produce ~5-10 augmented variants (different notes, effe
 - Contrastive/triplet loss on the embedding layer (same patch = close, different patch = far)
 - Validation: render predicted params, compare audio via spectral similarity
 
-#### 8. `list_models`
+#### 10. `list_models`
 
 List available trained inverse models with their metadata.
 
@@ -401,15 +526,22 @@ Multiple parameter combinations can produce perceptually identical sounds (e.g.,
 - **Top-K predictions**: return multiple plausible param vectors, ranked by confidence
 - **Audio-domain validation**: after prediction, render the predicted params and verify via `audio_compare`
 
-### Inference on Real Stems
+### Inference on Real Audio
 
-At inference time, a real stem from a song will contain:
-- Polyphonic content (chord progressions)
+At inference time, the model receives **clean isolated notes** from the note-level extraction pipeline (tools 6-7), not raw polyphonic stems. This dramatically improves input quality:
+
+**Before note-level extraction** (raw stem input):
+- Polyphonic content (chord progressions) — model must disentangle
 - Effects from mixing (reverb, compression, EQ)
 - Stem separation artifacts (bleed from other instruments)
 - Recording noise
 
-Because the model was trained with all of these augmentations, the timbre encoder should produce an embedding that's in the same space as the clean training data. The parameter heads then decode this to the best-fit dry patch parameters — the effects are implicitly stripped by the invariance.
+**After note-level extraction** (isolated note input):
+- Single-note audio (monophonic or cleanly masked)
+- Effects may still be present but are easier to see through on a single note
+- Quality-assessed — heavily distorted or artifact-laden notes are excluded
+
+The model's augmentation-trained invariance still helps with residual effects and noise, but the cleaner input means higher confidence predictions. Running inference on multiple isolated notes and comparing results provides an additional consistency check.
 
 ## Workspace
 
@@ -418,6 +550,8 @@ Because the model was trained with all of these augmentations, the timbre encode
   workspace/
     fetched/          # Downloaded/imported audio
     stems/            # Demucs output
+    transcriptions/   # Basic Pitch MIDI + note event JSON
+    isolated_notes/   # Per-note WAV files from nussl masking
     rendered/         # Captured synth recordings
   trained_models/     # Model checkpoints
   training_data/      # Generated datasets (can be large)
@@ -441,22 +575,27 @@ Because the model was trained with all of these augmentations, the timbre encode
 ```
 1. fetch_audio("youtube.com/watch?v=...")         → full_mix.wav
 2. stem_separate(full_mix.wav)                     → other.wav (keyboards)
-3. inverse_synth(other.wav, "subtractive")         → raw parameter vector (0-1)
-4. Agent maps vector to target device params       → (open research problem)
-5. Agent calls keyboards-mcp set_parameters(...)   → synth is configured
-6. (Optional) audio_render + audio_compare         → validate & fine-tune
+3. note_transcribe(other.wav)                      → transcription.mid + polyphony profile
+4. note_isolate(other.wav, transcription.mid, [candidates]) → clean isolated notes
+5. inverse_synth(isolated_note.wav, "subtractive") → raw parameter vector (0-1)
+   (run on multiple clean notes, compare predictions for consistency)
+6. Agent maps vector to target device params       → (open research problem)
+7. Agent calls keyboards-mcp set_parameters(...)   → synth is configured
+8. (Optional) audio_render + audio_compare         → validate & fine-tune
 ```
 
-Steps 1-3 replace the research + manual patch design process. Step 4 (vector → device params) is under active research — initial approach may be direct parameter-name matching for devices whose params align with the vector labels.
+Steps 1-5 replace the research + manual patch design process. Steps 3-4 (note-level extraction) are critical for feeding clean input to the inverse model. Step 6 (vector → device params) is under active research.
 
 ## Agent Workflow (without trained model — fallback)
 
 ```
 1. fetch_audio → stem_separate → other.wav
-2. spectrum_analyze(other.wav)                     → spectral features + synth hints
-3. Agent uses synth hints to set initial params via keyboards-mcp
-4. audio_render → audio_compare                    → spectral diff + action items
-5. Agent adjusts params based on action_items, repeat 4-5
+2. note_transcribe(other.wav)                      → transcription.mid + candidates
+3. note_isolate(other.wav, transcription.mid, [...]) → clean isolated notes
+4. spectrum_analyze(isolated_note.wav)              → spectral features + synth hints
+5. Agent uses synth hints to set initial params via keyboards-mcp
+6. audio_render → audio_compare                    → spectral diff + action items
+7. Agent adjusts params based on action_items, repeat 6-7
 ```
 
 ## Implementation Sequence
@@ -470,35 +609,45 @@ Steps 1-3 replace the research + manual patch design process. Step 4 (vector →
 6. `spectrum_analyze`: spectral features + synth hints
 7. `audio_compare`: A/B diff + action items
 
+### Phase 1.5: Note-Level Extraction (Score-Informed Source Separation)
+8. `analysis/transcription.py`: Basic Pitch integration + polyphony profiling + candidate selection
+9. `note_transcribe` tool: wire transcription to MCP
+10. `analysis/note_isolation.py`: nussl time-frequency masking + time-slice extraction + quality assessment
+11. `note_isolate` tool: wire isolation to MCP
+
 ### Phase 2: Inverse Synthesis Framework
-8. `models/dataset.py`: dataset generation pipeline
-9. `models/synth_renderers/base.py`: abstract renderer interface
-10. `models/synth_renderers/subtractive.py`: first renderer (pure Python DSP or SurgeXT)
-11. `models/architecture.py`: CNN backbone + per-param MLP heads
-12. `models/trainer.py`: training loop with validation
-13. `models/inference.py`: load checkpoint, predict
+12. `models/dataset.py`: dataset generation pipeline
+13. `models/synth_renderers/base.py`: abstract renderer interface
+14. `models/synth_renderers/subtractive.py`: first renderer (pure Python DSP or SurgeXT)
+15. `models/architecture.py`: CNN backbone + per-param MLP heads
+16. `models/trainer.py`: training loop with validation
+17. `models/inference.py`: load checkpoint, predict
 
 ### Phase 3: First Trained Model (subtractive)
-14. Define the subtractive synthesis parameter vector (oscillators, filter, envelopes, LFO)
-15. Generate 50K samples using subtractive renderer
-16. Train inverse model, validate on held-out set
-17. `inverse_synth` tool: wire up inference to MCP
-18. `train_model` tool: expose training pipeline to agent
-19. `list_models` tool: model inventory
+18. Define the subtractive synthesis parameter vector (oscillators, filter, envelopes, LFO)
+19. Generate 50K samples using subtractive renderer
+20. Train inverse model, validate on held-out set
+21. `inverse_synth` tool: wire up inference to MCP
+22. `train_model` tool: expose training pipeline to agent
+23. `list_models` tool: model inventory
 
 ### Phase 4: Expand synthesis types
-20. Additional renderers (FM, organ)
-21. Train models per synthesis type
-22. Research vector → device param mapping (vector DB, name matching, learned mapping)
+24. Additional renderers (FM, organ)
+25. Train models per synthesis type
+26. Research vector → device param mapping (vector DB, name matching, learned mapping)
 
 ## Verification
 
 1. **Audio pipeline:** `fetch_audio` → `stem_separate` → verify 4 stems produced
 2. **Spectrum:** `spectrum_analyze` on pure sine at 440Hz → fundamental ~440Hz, no harmonics
-3. **Dataset gen:** Generate 100 samples for Prophet-6, verify (spectrogram, param_vector) pairs
-4. **Training:** Train on 1K samples, verify loss decreases, predictions are reasonable
-5. **Round-trip:** Generate random params → render → predict via model → compare predicted vs original params
-6. **End-to-end:** Separate a song → `inverse_synth` → apply params to keyboard → `audio_render` → `audio_compare` → similarity score
+3. **Transcription:** `note_transcribe` on a known polyphonic audio file → verify MIDI notes match expected pitches and timings
+4. **Note isolation:** `note_isolate` on a polyphonic stem → verify isolated notes are monophonic and quality-scored
+5. **Monophonic shortcut:** `note_isolate` on a monophonic window → verify time-slice extraction (no masking) produces clean output
+6. **Distortion triage:** `note_isolate` with `assess_quality=true` on distorted audio → verify distorted notes flagged as unusable
+7. **Dataset gen:** Generate 100 samples for Prophet-6, verify (spectrogram, param_vector) pairs
+8. **Training:** Train on 1K samples, verify loss decreases, predictions are reasonable
+9. **Round-trip:** Generate random params → render → predict via model → compare predicted vs original params
+10. **End-to-end:** Separate a song → `note_transcribe` → `note_isolate` → `inverse_synth` → apply params to keyboard → `audio_render` → `audio_compare` → similarity score
 
 ## Test Coverage
 
@@ -517,6 +666,19 @@ Steps 1-3 replace the research + manual patch design process. Step 4 (vector →
 - **Known difference:** Compare a sine at 440Hz to a sine at 880Hz. Assert frequency band diff highlights the shift.
 - **Different timbres:** Compare a sine to a square wave at same fundamental. Assert spectral envelope diff flags the harmonic content.
 
+**`tests/test_transcription.py`** — polyphonic transcription:
+- **Known monophonic input:** Generate a single-note sine wave. Run `note_transcribe`. Assert exactly 1 note event with correct pitch.
+- **Known polyphonic input:** Generate two simultaneous sine waves (C4 + E4). Assert 2 note events with correct pitches and overlapping time windows.
+- **Polyphony profile:** Assert monophonic windows detected where only 1 note sounds, polyphonic windows where 2+ overlap.
+- **Candidate selection:** Assert candidates prefer monophonic windows and notes with duration > 0.5s.
+
+**`tests/test_note_isolation.py`** — score-informed source separation:
+- **Monophonic extraction:** Provide a monophonic window. Assert `isolation_method` is `time_slice` (no masking needed).
+- **Polyphonic extraction:** Provide a 2-note polyphonic window. Assert `isolation_method` is `nussl_tf_mask`.
+- **Quality assessment — clean:** Isolate a clean synthesized note. Assert `quality_score > 0.8` and `usable=true`.
+- **Quality assessment — distorted:** Isolate a heavily distorted note. Assert `usable=false` and `detected_effects` includes `heavy_distortion`.
+- **Quality assessment — reverb:** Isolate a note with reverb. Assert `usable=true` and `detected_effects` includes `reverb`.
+
 **`tests/test_dataset_generation.py`** — dataset pipeline:
 - **Output shape:** Generate 10 samples for subtractive synth. Assert each has (spectrogram, param_vector) with correct dimensions.
 - **Param ranges:** Assert all param values in generated vectors are within [0, 1].
@@ -534,12 +696,13 @@ Steps 1-3 replace the research + manual patch design process. Step 4 (vector →
 **`tests/test_pipeline_integration.py`**:
 - **fetch + analyze:** Fetch a local test WAV file, run `spectrum_analyze`. Assert structured output (no crash, expected keys present).
 - **fetch + separate:** Fetch a short test file, run stem separation (with `htdemucs`). Assert 4 stem files produced in workspace. (Slow — mark with `@pytest.mark.slow`.)
+- **transcribe + isolate:** Transcribe a short polyphonic test file, then isolate candidate notes. Assert isolated WAV files are produced and quality-scored. (Slow — mark with `@pytest.mark.slow`.)
 - **dataset + train:** Generate 100 samples, train for 2 epochs. Assert loss decreased between epoch 1 and 2. Assert checkpoint file written. (Slow — mark with `@pytest.mark.slow`.)
 
 ### E2E tests
 
 **`tests/test_mcp_tools.py`** — MCP server tool invocations:
-- **Tool listing:** Start the MCP server, list tools. Assert `fetch_audio`, `stem_separate`, `spectrum_analyze`, `audio_compare`, `inverse_synth` are all present.
+- **Tool listing:** Start the MCP server, list tools. Assert `fetch_audio`, `stem_separate`, `spectrum_analyze`, `audio_compare`, `note_transcribe`, `note_isolate`, `inverse_synth` are all present.
 - **spectrum_analyze round-trip:** Call the MCP tool with a test WAV path. Assert JSON response contains expected fields (`harmonics`, `spectral_envelope`, `synth_hints`).
 - **audio_compare round-trip:** Call with two identical file paths. Assert high similarity score.
 - **inverse_synth without model:** Call `inverse_synth` for a synth type with no trained model. Assert user-friendly error message (not a stack trace).
