@@ -157,6 +157,8 @@ def test_server_has_expected_tools() -> None:
         "spectrum_analyze",
         "audio_compare",
         "audio_render",
+        "note_transcribe",
+        "note_isolate",
         "inverse_synth",
         "train_model",
         "list_models",
@@ -274,6 +276,31 @@ def create_server() -> Server:
                 },
             ),
             Tool(
+                name="note_transcribe",
+                description="Transcribe polyphonic audio to MIDI notes using Basic Pitch, with polyphony profiling and candidate selection",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "audio_path": {"type": "string", "description": "Path to audio file (typically keyboard stem)"},
+                    },
+                    "required": ["audio_path"],
+                },
+            ),
+            Tool(
+                name="note_isolate",
+                description="Isolate individual notes from polyphonic audio using score-informed source separation (nussl)",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "audio_path": {"type": "string", "description": "Path to audio file"},
+                        "transcription_path": {"type": "string", "description": "Path to MIDI transcription from note_transcribe"},
+                        "note_indices": {"type": "array", "items": {"type": "integer"}, "description": "Indices of notes to isolate"},
+                        "assess_quality": {"type": "boolean", "description": "Run effects/distortion triage (default: true)"},
+                    },
+                    "required": ["audio_path", "transcription_path", "note_indices"],
+                },
+            ),
+            Tool(
                 name="inverse_synth",
                 description="Predict synthesizer parameters from audio using a trained ML model",
                 inputSchema={
@@ -346,7 +373,7 @@ Expected: PASS (or fix any type errors).
 
 ```bash
 git add -A
-git commit -m "feat: add MCP server skeleton with 8 stub tools"
+git commit -m "feat: add MCP server skeleton with 10 stub tools"
 ```
 
 ---
@@ -406,7 +433,7 @@ uv run pytest -v                 # Verbose output
 
 ## Architecture
 
-Python MCP server using stdio transport. Currently has 8 stub tools — implementations are tracked in plan 7 (in keyboards-mcp repo).
+Python MCP server using stdio transport. Currently has 10 stub tools — implementations are tracked in plan 7 (in keyboards-mcp repo).
 
 ### Tools
 
@@ -417,6 +444,8 @@ Python MCP server using stdio transport. Currently has 8 stub tools — implemen
 | spectrum_analyze | Spectral features + synth hints | Stub |
 | audio_compare | A/B spectral diff | Stub |
 | audio_render | System audio capture | Stub |
+| note_transcribe | Polyphonic transcription via Basic Pitch | Stub |
+| note_isolate | Score-informed source separation via nussl | Stub |
 | inverse_synth | ML parameter prediction | Stub |
 | train_model | Train inverse synthesis model | Stub |
 | list_models | Trained model inventory | Stub |
