@@ -33,7 +33,7 @@ def stem_separate_impl(
 
     model = get_model(model_name)
     model.eval()
-    wav = AudioFile(Path(audio_path)).read(streams=0, samplerate=model.samplerate, channels=model.audio_channels)
+    wav = AudioFile(Path(audio_path)).read(streams=0, samplerate=model.samplerate, channels=model.audio_channels)  # type: ignore[no-untyped-call]
     sources = apply_model(model, wav[None], device="cpu")[0]  # [sources, channels, samples]
 
     cache_dir.mkdir(parents=True, exist_ok=True)

@@ -19,7 +19,8 @@ def compute_mel_spectrogram(
     mel = librosa.feature.melspectrogram(
         y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels,
     )
-    return librosa.power_to_db(mel, ref=np.max)
+    result: np.ndarray = librosa.power_to_db(mel, ref=np.max)
+    return result
 
 
 def extract_spectral_features(y: np.ndarray, sr: int) -> SpectralFeatures:

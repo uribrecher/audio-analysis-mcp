@@ -21,13 +21,14 @@ def spectrum_analyze(
 ) -> str:
     """Extract mel spectrogram and spectral features from audio."""
     ws = get_workspace()
-    y, sr = librosa.load(
+    y, sr_val = librosa.load(
         audio_path,
         sr=44100,
         mono=True,
         offset=start_time or 0.0,
         duration=duration or 5.0,
     )
+    sr = int(sr_val)
 
     # Mel spectrogram -> save as .npy
     mel = compute_mel_spectrogram(y, sr, n_mels=n_mels, hop_length=hop_length)

@@ -23,8 +23,9 @@ def _band_energy_db(
 
 def compare_audio(target_path: str, rendered_path: str) -> AudioCompareResult:
     """Compare two audio files using mel spectrogram distance and per-band energy."""
-    y_target, sr = librosa.load(target_path, sr=44100, mono=True)
+    y_target, sr_val = librosa.load(target_path, sr=44100, mono=True)
     y_rendered, _ = librosa.load(rendered_path, sr=44100, mono=True)
+    sr = int(sr_val)
 
     # Pad shorter signal to match lengths
     max_len = max(len(y_target), len(y_rendered))
