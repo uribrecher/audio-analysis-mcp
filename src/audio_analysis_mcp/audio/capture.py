@@ -5,7 +5,7 @@ import numpy as np
 import soundfile as sf
 
 
-def _get_sd():  # type: ignore[no-untyped-def]
+def _get_sd() -> Any:
     """Lazy-import sounddevice (requires PortAudio system library)."""
     import sounddevice as sd
     return sd
