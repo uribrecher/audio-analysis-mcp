@@ -6,8 +6,7 @@ Python MCP server providing audio analysis tools for sound recreation.
 
 ```bash
 uv sync --dev              # Install all dependencies
-uv run pytest -v           # Run fast tests
-uv run pytest -m slow      # Run slow tests (need ML models)
+uv run pytest -v           # Run all tests
 uv run mypy src/           # Type check
 uv run python -m audio_analysis_mcp  # Run MCP server (stdio)
 ```
@@ -21,5 +20,5 @@ Unit tests target logic modules directly. E2E tests call MCP tool functions.
 ## Testing
 
 - `pytest` with synthetic audio fixtures (sine/square waves via numpy)
-- `@pytest.mark.slow` for tests needing ML models (Demucs, CLAP)
-- CI runs `pytest -m "not slow"`
+- Tests that require ML model downloads or hardware (sounddevice) are mocked in unit tests
+- CI runs `pytest -m "not slow"` (use `@pytest.mark.slow` for future tests needing real ML models)

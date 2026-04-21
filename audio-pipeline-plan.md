@@ -71,13 +71,14 @@ dependencies = [
   "numpy>=1.24",
   "scipy>=1.10",
   "soundfile>=0.12",       # WAV I/O
-  "sounddevice>=0.4",      # Audio capture
-  "basic-pitch>=0.3.0",    # Polyphonic transcription (Spotify, Apache 2.0)
-  "laion-clap>=1.0",       # Audio embedding for perceptual similarity
+  "sounddevice>=0.4",      # Audio capture (lazy-imported; requires PortAudio)
   "pydantic>=2.0",         # Structured output schemas
 ]
+# Phase 2 additions (not yet declared):
+#   "basic-pitch>=0.3.0"   # Polyphonic transcription (Spotify, Apache 2.0)
+#   "laion-clap>=1.0"      # Audio embedding for perceptual similarity (CLAP)
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "mypy>=1.10",
   "pytest>=8.0",
@@ -434,9 +435,12 @@ jobs:
 - Mel spectrogram shape matches expected (n_mels, time_frames)
 
 **`tests/test_comparison.py`:**
-- Identical inputs → mel distance ~0, CLAP similarity ~1.0
-- 440Hz vs 880Hz → significant mel distance, low CLAP similarity
+- Identical inputs → mel distance ~0
+- 440Hz vs 880Hz → significant mel distance
 - Sine vs square at same fundamental → moderate mel distance, band diffs highlight harmonics
+- CLAP similarity returns None (placeholder until Phase 2)
+
+**Phase 2 tests (not yet implemented):**
 
 **`tests/test_transcription.py`:**
 - Single-note sine → 1 note event with correct pitch
@@ -457,11 +461,11 @@ jobs:
 
 - import + analyze: local WAV → spectrum_analyze → structured output with mel spectrogram
 - import + separate: short file → stem_separate → 4 stems
-- transcribe + triage + isolate: polyphonic file → note_transcribe → note_triage → note_isolate → isolated WAVs
+- Phase 2: transcribe + triage + isolate pipeline
 
 ### E2E tests
 
-- MCP tool listing: all 8 tools present
+- MCP tool listing: all 6 Phase 1 tools present (import_audio, stem_separate, audio_list_devices, audio_render, spectrum_analyze, audio_compare)
 - spectrum_analyze round-trip via MCP
 - audio_compare round-trip via MCP
 

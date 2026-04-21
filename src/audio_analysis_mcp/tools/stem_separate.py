@@ -20,6 +20,8 @@ def stem_separate_impl(
     audio_path: str, stems_dir: Path, model_name: str = "htdemucs"
 ) -> StemSeparateResult:
     """Run Demucs stem separation via Python API. Returns cached result if available."""
+    if not Path(audio_path).exists():
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
     fhash = _file_hash(audio_path)
     model = get_model(model_name)
     source_names = list(model.sources)

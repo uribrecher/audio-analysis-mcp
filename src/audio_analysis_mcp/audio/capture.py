@@ -27,6 +27,8 @@ def capture_audio(
     sample_rate: int = 44100,
 ) -> str:
     """Capture audio from an input device. Returns path to WAV file."""
+    if duration <= 0:
+        raise ValueError(f"duration must be positive, got {duration}")
     sd = _get_sd()
     frames = int(duration * sample_rate)
     recording = sd.rec(

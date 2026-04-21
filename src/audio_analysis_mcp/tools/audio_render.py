@@ -5,10 +5,16 @@ from audio_analysis_mcp.schemas import AudioRenderResult
 
 
 @mcp.tool()
+def audio_list_devices() -> str:
+    """List available audio input devices."""
+    devices = list_audio_devices()
+    return json.dumps(devices, indent=2, default=str)
+
+
+@mcp.tool()
 def audio_render(
     duration: float = 5.0,
     device: str | int | None = None,
-    list_devices: bool = False,
 ) -> str:
     """Capture audio from a system audio device (BlackHole, USB audio).
 
@@ -16,10 +22,6 @@ def audio_render(
     System Settings > Privacy & Security. This applies to virtual devices
     like BlackHole identically to physical microphones.
     """
-    if list_devices:
-        devices = list_audio_devices()
-        return json.dumps(devices, indent=2, default=str)
-
     ws = get_workspace()
     path = capture_audio(duration=duration, output_dir=ws.rendered, device=device)
 
