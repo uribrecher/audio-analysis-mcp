@@ -19,15 +19,33 @@ def _file_hash(path: str) -> str:
     return h.hexdigest()[:16]
 
 
+ALLOWED_MODELS = {"htdemucs", "htdemucs_ft", "htdemucs_6s", "hdemucs_mmi", "mdx", "mdx_extra"}
+
+
 def _read_cached(cache_dir: Path) -> list[str] | None:
     """Read source names from cache manifest. Returns None on cache miss."""
     manifest = cache_dir / MANIFEST_FILE
     if not manifest.exists():
         return None
-    source_names: list[str] = json.loads(manifest.read_text())
+    try:
+        parsed = json.loads(manifest.read_text())
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list) or not all(isinstance(s, str) for s in parsed):
+        return None
+    source_names: list[str] = parsed
     if all((cache_dir / f"{s}.wav").exists() for s in source_names):
         return source_names
     return None
+
+
+def _sanitize_model_name(model_name: str) -> str:
+    """Validate model name to prevent path traversal."""
+    if model_name not in ALLOWED_MODELS:
+        raise ValueError(
+            f"Unknown model: {model_name}. Allowed: {', '.join(sorted(ALLOWED_MODELS))}"
+        )
+    return model_name
 
 
 def stem_separate_impl(
@@ -37,8 +55,9 @@ def stem_separate_impl(
     if not Path(audio_path).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
+    safe_model = _sanitize_model_name(model_name)
     fhash = _file_hash(audio_path)
-    cache_dir = stems_dir / fhash / model_name
+    cache_dir = stems_dir / fhash / safe_model
 
     # Check cache without loading the model
     cached_sources = _read_cached(cache_dir)

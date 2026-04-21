@@ -20,6 +20,11 @@ def spectrum_analyze(
     hop_length: int = 512,
 ) -> str:
     """Extract mel spectrogram and spectral features from audio."""
+    if start_time is not None and start_time < 0:
+        raise ValueError(f"start_time must be >= 0, got {start_time}")
+    if duration is not None and duration <= 0:
+        raise ValueError(f"duration must be > 0, got {duration}")
+
     ws = get_workspace()
     y, sr_val = librosa.load(
         audio_path,

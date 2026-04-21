@@ -1,9 +1,8 @@
-import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import torch
 import pytest
-from audio_analysis_mcp.tools.stem_separate import stem_separate_impl, MANIFEST_FILE
+from audio_analysis_mcp.tools.stem_separate import stem_separate_impl
 
 SOURCES = ["drums", "bass", "other", "vocals"]
 

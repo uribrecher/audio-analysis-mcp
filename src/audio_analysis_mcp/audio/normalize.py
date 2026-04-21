@@ -18,12 +18,16 @@ def normalize_audio(
     """
     if not Path(input_path).exists():
         raise FileNotFoundError(f"Audio file not found: {input_path}")
+    if start_time is not None and start_time < 0:
+        raise ValueError(f"start_time must be >= 0, got {start_time}")
+    if duration is not None and duration <= 0:
+        raise ValueError(f"duration must be > 0, got {duration}")
 
     y, sr = librosa.load(
         input_path,
         sr=TARGET_SR,
         mono=True,
-        offset=start_time or 0.0,
+        offset=0.0 if start_time is None else start_time,
         duration=duration,
     )
 
