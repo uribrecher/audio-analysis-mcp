@@ -4,9 +4,9 @@
 
 ## Context
 
-A Python MCP server (stdio transport) providing audio processing tools that the sound-recreation agent uses to fetch, separate, analyze, transcribe, and isolate audio. These tools produce clean audio segments that feed into the two research sub-projects (engine detection, inverse synthesis).
+A Python MCP server (stdio transport) providing audio processing tools that the sound-recreation agent uses to import, separate, analyze, transcribe, and isolate audio. These tools produce clean audio segments that feed into the two research sub-projects (engine detection, inverse synthesis).
 
-**Tech stack:** Python 3.12+, `mcp` (Python MCP SDK), `uv`, `pytest`, `mypy`
+**Tech stack:** Python 3.12+, `mcp` (Python MCP SDK), `uv` (package management), `pytest`, `mypy`
 
 **Design spec:** `docs/superpowers/specs/2026-04-20-research-decomposition-design.md`
 
@@ -15,27 +15,33 @@ A Python MCP server (stdio transport) providing audio processing tools that the 
 ```
 audio-analysis-mcp/
   pyproject.toml
+  .github/
+    workflows/
+      ci.yml                             # pytest (non-slow) + mypy
   CLAUDE.md
   src/
     audio_analysis_mcp/
       __init__.py
       server.py                        # MCP server, tool registration
       workspace.py                     # Temp/workspace directory management
+      schemas.py                       # Pydantic output schemas for all tools
       tools/
         __init__.py
-        fetch_audio.py                 # YouTube download / local file import
+        import_audio.py                # Local file import + normalization
         stem_separate.py               # Demucs stem separation
-        spectrum_analyze.py            # Spectral feature extraction
-        audio_compare.py               # A/B spectral diff
+        spectrum_analyze.py            # Mel spectrogram + spectral feature extraction
+        audio_compare.py               # Mel spectrogram + CLAP embedding comparison
         audio_render.py                # Capture audio from system device
         note_transcribe.py             # Polyphonic transcription via Basic Pitch
-        note_isolate.py                # Score-informed source separation via nussl
+        note_triage.py                 # Candidate selection from transcription
+        note_isolate.py                # Time-frequency box isolation
       analysis/
         __init__.py
-        spectral.py                    # Librosa-based feature extraction
-        comparison.py                  # A/B spectral diff logic
-        transcription.py               # Basic Pitch integration + polyphony profiling
-        note_isolation.py              # nussl time-frequency masking + quality assessment
+        spectral.py                    # Librosa-based feature extraction + mel spectrogram
+        comparison.py                  # Mel spectrogram diff + CLAP embedding similarity
+        transcription.py               # Basic Pitch integration
+        note_triage.py                 # Polyphony profiling + candidate selection
+        note_isolation.py              # Time-frequency masking
       audio/
         __init__.py
         capture.py                     # sounddevice recording
@@ -44,6 +50,7 @@ audio-analysis-mcp/
     test_spectral.py
     test_comparison.py
     test_transcription.py
+    test_note_triage.py
     test_note_isolation.py
     test_pipeline_integration.py
     test_mcp_tools.py
@@ -58,39 +65,188 @@ requires-python = ">=3.12"
 dependencies = [
   "mcp>=1.0.0",
   "demucs>=4.0.0",         # Stem separation
-  "librosa>=0.10.0",       # Spectral analysis
+  "librosa>=0.10.0",       # Spectral analysis + mel spectrograms
   "torch>=2.0",            # Already pulled by Demucs
-  "torchaudio>=2.0",       # Audio transforms, mel spectrograms
+  "torchaudio>=2.0",       # Audio transforms
   "numpy>=1.24",
   "scipy>=1.10",
   "soundfile>=0.12",       # WAV I/O
-  "sounddevice>=0.4",      # Audio capture
-  "yt-dlp>=2024.0",        # YouTube download
-  "basic-pitch>=0.3.0",    # Polyphonic transcription (Spotify, MIT license)
-  "nussl>=1.1.0",          # Score-informed source separation
+  "sounddevice>=0.4",      # Audio capture (lazy-imported; requires PortAudio)
   "pydantic>=2.0",         # Structured output schemas
 ]
+# Phase 2 additions (not yet declared):
+#   "basic-pitch>=0.3.0"   # Polyphonic transcription (Spotify, Apache 2.0)
+#   "laion-clap>=1.0"      # Audio embedding for perceptual similarity (CLAP)
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "mypy>=1.10",
   "pytest>=8.0",
 ]
 ```
 
+**Removed:** `yt-dlp` (legal concerns — see Decision Log), `nussl` (replaced by simpler time-frequency box isolation).
+
+## Output Schemas
+
+All tools return structured JSON matching these Pydantic models.
+
+### ImportAudioResult
+
+```python
+class ImportAudioResult(BaseModel):
+    audio_path: str            # Path to normalized WAV
+    sample_rate: int           # Always 44100
+    duration_seconds: float
+    channels: int
+```
+
+### StemSeparateResult
+
+```python
+class StemFile(BaseModel):
+    stem: str                  # "vocals" | "drums" | "bass" | "other"
+    path: str
+
+class StemSeparateResult(BaseModel):
+    stems: list[StemFile]
+    model: str                 # Demucs model used
+    cached: bool               # Whether result was from cache
+```
+
+### AudioRenderResult
+
+```python
+class AudioRenderResult(BaseModel):
+    audio_path: str
+    duration_seconds: float
+    device: str
+    sample_rate: int
+```
+
+### SpectrumAnalyzeResult
+
+```python
+class MelSpectrogramData(BaseModel):
+    array_path: str            # Path to saved .npy file (n_mels x time_frames)
+    n_mels: int
+    hop_length: int
+    n_fft: int
+    sample_rate: int
+
+class SpectralFeatures(BaseModel):
+    fundamental_hz: float | None
+    harmonic_ratios: list[float]       # Amplitude ratios of first N harmonics
+    spectral_centroid_hz: float
+    spectral_rolloff_hz: float
+    spectral_bandwidth_hz: float
+
+class ADSREstimate(BaseModel):
+    attack_ms: float
+    decay_ms: float
+    sustain_level: float               # 0.0 - 1.0
+    release_ms: float
+
+class ModulationDetection(BaseModel):
+    vibrato_hz: float | None
+    tremolo_hz: float | None
+    chorus_detected: bool
+
+class SpectrumAnalyzeResult(BaseModel):
+    mel_spectrogram: MelSpectrogramData
+    spectral_features: SpectralFeatures
+    adsr: ADSREstimate
+    modulation: ModulationDetection
+```
+
+### AudioCompareResult
+
+```python
+class BandDiff(BaseModel):
+    band: str                  # e.g. "low (0-300Hz)", "mid (300-2kHz)", "high (2k-8kHz)"
+    target_energy_db: float
+    rendered_energy_db: float
+    diff_db: float
+
+class AudioCompareResult(BaseModel):
+    mel_spectrogram_distance: float    # L2 distance on normalized mel spectrograms
+    clap_cosine_similarity: float      # Cosine similarity of CLAP embeddings (0-1)
+    band_diffs: list[BandDiff]
+```
+
+### NoteTranscribeResult
+
+```python
+class NoteEvent(BaseModel):
+    index: int
+    pitch_midi: int                    # MIDI note number (0-127)
+    pitch_name: str                    # e.g. "C4", "F#5"
+    start_time: float                  # Seconds
+    end_time: float                    # Seconds
+    duration: float                    # Seconds
+    amplitude: float                   # 0.0 - 1.0
+    pitch_bend: list[int] | None       # MIDI pitch bend values per frame
+
+class NoteTranscribeResult(BaseModel):
+    midi_path: str                     # Path to .mid file
+    note_events: list[NoteEvent]
+    total_notes: int
+    duration_seconds: float
+```
+
+### NoteTriageResult
+
+```python
+class TriageWindow(BaseModel):
+    start_time: float
+    end_time: float
+    polyphony_count: int               # Number of simultaneous notes
+
+class CandidateNote(BaseModel):
+    note_index: int                    # Index into NoteTranscribeResult.note_events
+    pitch_midi: int
+    pitch_name: str
+    start_time: float
+    end_time: float
+    start_freq: float                  # Hz — lower bound of isolation box
+    end_freq: float                    # Hz — upper bound of isolation box
+    selection_reason: str              # e.g. "monophonic, long duration, good isolation"
+
+class NoteTriageResult(BaseModel):
+    polyphony_profile: list[TriageWindow]
+    candidates: list[CandidateNote]
+```
+
+### NoteIsolateResult
+
+```python
+class IsolatedNote(BaseModel):
+    audio_path: str                    # Path to isolated WAV
+    start_time: float
+    end_time: float
+    start_freq: float
+    end_freq: float
+    duration: float
+
+class NoteIsolateResult(BaseModel):
+    isolated_notes: list[IsolatedNote]
+```
+
 ## Tools
 
-### 1. `fetch_audio`
+### 1. `import_audio`
 
-Download from YouTube or import a local file. Normalize to 44.1kHz 16-bit WAV.
+Import a local audio file. Normalize to 44.1kHz 16-bit WAV.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| source | string | yes | YouTube URL or local file path |
+| file_path | string | yes | Path to local audio file (WAV, FLAC, MP3, etc.) |
 | start_time | float | no | Trim start (seconds) |
 | duration | float | no | Trim duration (seconds) |
 
-**Returns:** Path to normalized WAV in `{workspace}/fetched/`.
+**Returns:** `ImportAudioResult` — path to normalized WAV in `{workspace}/imported/`.
+
+**Note:** YouTube/streaming download was deliberately excluded due to legal concerns (YouTube ToS violation, active DMCA Section 1201 litigation against download tools). Users must provide audio files they have rights to.
 
 ### 2. `stem_separate`
 
@@ -101,9 +257,9 @@ Demucs stem separation into vocals, drums, bass, other (keyboards/synths).
 | audio_path | string | yes | Path to audio file |
 | model | string | no | Demucs model (default: `htdemucs`) |
 
-**Returns:** Paths to all stem WAV files. Cached by input hash.
+**Returns:** `StemSeparateResult` — paths to all stem WAV files. Cached by input hash.
 
-**Long-running:** 1-5 min. Runs as async subprocess with 10 min timeout.
+**Long-running:** 1-5 min. Uses the Demucs Python API synchronously with `torch.no_grad()` for reduced memory usage.
 
 ### 3. `audio_render`
 
@@ -115,104 +271,157 @@ Capture audio from a system audio device (BlackHole, USB audio).
 | device | string | no | Audio input device name/index |
 | list_devices | bool | no | Just list available devices |
 
-**Returns:** Path to recorded WAV, or device list.
+**Returns:** `AudioRenderResult` — path to recorded WAV, or device list.
+
+**macOS permissions required:**
+- The host process (Terminal, packaged .app) must have **Microphone** permission granted via System Settings > Privacy & Security > Microphone. This applies to virtual devices (BlackHole) identically to physical microphones — macOS TCC makes no distinction.
+- For a packaged .app: requires `com.apple.security.device.audio-input` entitlement and `NSMicrophoneUsageDescription` in Info.plist.
+- BlackHole itself requires one-time System Extension approval in System Settings.
+- Planned improvement: detect microphone-permission denial explicitly and return a clear user-facing guidance error. Until that handling is implemented, permission failures surface as the underlying `sounddevice` exception.
 
 ### 4. `spectrum_analyze`
 
-Extract spectral features for diagnostics and iterative matching.
+Extract mel spectrogram and spectral features for diagnostics and iterative matching.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | audio_path | string | yes | Path to audio file |
 | start_time | float | no | Analysis window start |
 | duration | float | no | Analysis window (default: 5s) |
+| n_mels | int | no | Mel frequency bins (default: 128) |
+| hop_length | int | no | Samples between frames (default: 512) |
 
-**Returns:** Harmonic profile, spectral envelope, ADSR, modulation detection (JSON).
+**Returns:** `SpectrumAnalyzeResult` — mel spectrogram saved as .npy array, plus spectral features, ADSR estimate, and modulation detection.
 
-Note: The original plan included "synth hints" in this tool's output. That functionality is now the domain of the engine detection research project. This tool returns raw spectral features only.
+The mel spectrogram is the primary output for ML pipelines. It is saved as a numpy `.npy` file that downstream models can load directly. Generation uses librosa:
+
+```python
+mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=2048, hop_length=512, n_mels=128)
+mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+np.save(output_path, mel_spec_db)
+```
 
 ### 5. `audio_compare`
 
-A/B spectral diff — used for iterative matching (render -> compare -> tweak).
+Compare target audio vs. synthesized attempt using mel spectrogram distance and CLAP embedding similarity.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | target_path | string | yes | Reference audio |
 | rendered_path | string | yes | Synthesized attempt |
 
-**Returns:** Similarity scores, frequency band diffs, prioritized action items (JSON).
+**Returns:** `AudioCompareResult` — mel spectrogram L2 distance, CLAP cosine similarity (None until Phase 2), per-band energy diffs.
+
+**Approach:**
+1. **Mel spectrogram L2 distance** — compute mel spectrograms of both signals, normalize, take L2 distance. Fast, interpretable, good for low-level fidelity.
+2. **CLAP embedding cosine similarity** (Phase 2) — pass both through LAION-CLAP encoder, compute cosine similarity. Currently returns `None`; will be implemented when the CLAP dependency is added.
+3. **Per-band energy comparison** — split into low/mid/high frequency bands, report energy differences in dB.
 
 ### 6. `note_transcribe`
 
-Polyphonic transcription using Spotify Basic Pitch. Extracts MIDI note events with polyphony profiling and candidate note selection.
+Polyphonic transcription using Spotify Basic Pitch. Extracts MIDI note events.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | audio_path | string | yes | Path to audio file (typically the "other" keyboard stem) |
 
-**Returns:** MIDI file path, note events array (pitch, onset, offset, velocity, polyphony count), polyphony profile (monophonic/low/high windows), pre-selected candidate notes for isolation.
+**Returns:** `NoteTranscribeResult` — MIDI file path + structured note events array.
 
-Candidate selection criteria: monophonic or low-polyphony windows, duration > 0.5s, temporal isolation, pitch range spread.
+Basic Pitch (Apache 2.0, Spotify) outputs per-note: `(start_time, end_time, pitch_midi, amplitude, pitch_bend)`. This tool wraps that into the `NoteEvent` schema above.
 
-### 7. `note_isolate`
+### 7. `note_triage`
 
-Score-informed source separation using nussl time-frequency masking. For monophonic windows, uses simple time-slice extraction.
+Analyze a transcription and select the best candidate notes for isolation, based on polyphony profile.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | audio_path | string | yes | Path to audio file |
-| transcription_path | string | yes | Path to MIDI transcription from `note_transcribe` |
-| note_indices | int[] | yes | Indices of notes to isolate (from `note_events`) |
-| assess_quality | bool | no | Run effects/distortion triage (default: true) |
+| transcription | NoteTranscribeResult | yes | Output from `note_transcribe` |
 
-**Returns:** Per-note: WAV path, pitch, duration, isolation method (time_slice or nussl_tf_mask), quality score, detected effects, usability flag. Plus a `recommended_for_analysis` list of the cleanest notes.
+**Returns:** `NoteTriageResult` — polyphony profile (per-window note counts) and ranked candidate notes with recommended time/frequency isolation boxes.
 
-Quality triage flags: clean, reverb/delay (usable), chorus/modulation (usable), heavy distortion (unusable), masking artifacts (discard).
+**Candidate selection criteria:** monophonic or low-polyphony windows, duration > 0.5s, temporal isolation from neighboring notes, pitch range spread for diverse sampling.
+
+### 8. `note_isolate`
+
+Isolate a sound from audio within a time-frequency box.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| audio_path | string | yes | Path to audio file |
+| start_time | float | yes | Start of isolation window (seconds) |
+| end_time | float | yes | End of isolation window (seconds) |
+| start_freq | float | yes | Lower frequency bound (Hz) |
+| end_freq | float | yes | Upper frequency bound (Hz) |
+
+**Returns:** `NoteIsolateResult` — path to isolated WAV file.
+
+The algorithm applies a time-frequency mask (STFT → zero out bins outside the box → inverse STFT) to extract the target sound. The time/frequency window selection is handled upstream by `note_triage`.
 
 ## Workspace
 
 ```
 ~/.audio-analysis-mcp/
   workspace/
-    fetched/          # Downloaded/imported audio
+    imported/         # Imported/normalized audio
     stems/            # Demucs output
+    spectrograms/     # Mel spectrogram .npy files
     transcriptions/   # Basic Pitch MIDI + note event JSON
-    isolated_notes/   # Per-note WAV files from nussl masking
+    isolated_notes/   # Per-note WAV files from TF masking
     rendered/         # Captured synth recordings
 ```
 
 ## Agent Workflow (fallback — no trained models)
 
 ```
-1. fetch_audio → stem_separate → other.wav
-2. note_transcribe(other.wav) → transcription.mid + candidates
-3. note_isolate(other.wav, transcription.mid, [...]) → clean isolated notes
-4. spectrum_analyze(isolated_note.wav) → spectral features
-5. Agent uses spectral features to set initial params via keyboards-mcp
-6. audio_render → audio_compare → spectral diff + action items
-7. Agent adjusts params based on action_items, repeat 6-7
+1. import_audio → stem_separate → other.wav
+2. note_transcribe(other.wav) → transcription + note events
+3. note_triage(transcription) → select best candidates with time/freq windows
+4. note_isolate(other.wav, candidate windows) → clean isolated notes
+5. STOP — user listens to isolated notes and evaluates quality manually
 ```
 
-Once the research projects deliver trained models, steps 4-5 will be replaced by `engine_detect` + `inverse_synth`.
+Once the research projects deliver trained models, the workflow extends with `engine_detect` + `inverse_synth` to go from isolated notes to keyboard parameter settings automatically.
 
 ## Implementation Sequence
 
 ### Phase 1: Scaffold + Core Pipeline
 
-1. Scaffold: `pyproject.toml`, project structure, `server.py` with stdio transport
+1. Scaffold: `pyproject.toml` (managed by `uv`), project structure, `server.py` with stdio transport, `schemas.py` with all Pydantic output models
 2. `workspace.py`: directory management
-3. `fetch_audio`: yt-dlp download + local file import + WAV normalization
-4. `stem_separate`: Demucs subprocess with caching by input hash
-5. `audio_render`: sounddevice listing + capture
-6. `spectrum_analyze`: librosa-based spectral features (harmonics, envelope, ADSR, modulation)
-7. `audio_compare`: A/B spectral diff + similarity scores + action items
+3. `import_audio`: local file import + WAV normalization (44.1kHz 16-bit)
+4. `stem_separate`: Demucs Python API with caching by input hash
+5. `audio_list_devices` + `audio_render`: sounddevice listing + capture (macOS permissions documented)
+6. `spectrum_analyze`: mel spectrogram generation (librosa) + spectral features (harmonics, envelope, ADSR, modulation)
+7. `audio_compare`: mel spectrogram L2 distance + per-band diffs (CLAP deferred to Phase 2)
 
 ### Phase 2: Note-Level Extraction
 
-8. `analysis/transcription.py`: Basic Pitch integration + polyphony profiling + candidate selection
+8. `analysis/transcription.py`: Basic Pitch integration → NoteTranscribeResult
 9. `note_transcribe` tool: wire transcription module to MCP
-10. `analysis/note_isolation.py`: nussl time-frequency masking + time-slice extraction + quality assessment
-11. `note_isolate` tool: wire isolation module to MCP
+10. `analysis/note_triage.py`: polyphony profiling + candidate selection → NoteTriageResult
+11. `note_triage` tool: wire triage module to MCP
+12. `analysis/note_isolation.py`: STFT time-frequency box masking
+13. `note_isolate` tool: wire isolation module to MCP
+
+## CI / GitHub Workflow
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --dev
+      - run: uv run mypy src/
+      - run: uv run pytest -m "not slow"
+```
 
 ## Test Coverage
 
@@ -223,38 +432,54 @@ Once the research projects deliver trained models, steps 4-5 will be replaced by
 - Square wave → harmonics at 3x, 5x, 7x fundamental
 - Clear ADSR envelope → detected values within tolerance
 - Silence → graceful handling
+- Mel spectrogram shape matches expected (n_mels, time_frames)
 
 **`tests/test_comparison.py`:**
-- Identical inputs → similarity ~1.0, no action items
-- 440Hz vs 880Hz → frequency band diff highlights shift
-- Sine vs square at same fundamental → spectral envelope diff flags harmonics
+- Identical inputs → mel distance ~0
+- 440Hz vs 880Hz → significant mel distance
+- Sine vs square at same fundamental → moderate mel distance, band diffs highlight harmonics
+- CLAP similarity returns None (placeholder until Phase 2)
+
+**Phase 2 tests (not yet implemented):**
 
 **`tests/test_transcription.py`:**
 - Single-note sine → 1 note event with correct pitch
 - Two simultaneous sines (C4 + E4) → 2 events with correct pitches
+- Note event schema: all fields populated (pitch_midi, start_time, end_time, amplitude)
+
+**`tests/test_note_triage.py`:**
 - Polyphony profile → monophonic/polyphonic windows detected correctly
 - Candidates → prefer monophonic, duration > 0.5s
+- Candidate notes include time/freq isolation boxes
 
 **`tests/test_note_isolation.py`:**
-- Monophonic window → `time_slice` method
-- Polyphonic window → `nussl_tf_mask` method
-- Clean note → quality_score > 0.8, usable=true
-- Distorted note → usable=false, detected_effects includes heavy_distortion
-- Reverb note → usable=true, detected_effects includes reverb
+- Single sine in TF box → isolated cleanly
+- Two sines, isolate one by freq → other attenuated
+- Time-only window → correct segment extracted
 
 ### Integration tests (`@pytest.mark.slow`)
 
-- fetch + analyze: local WAV → spectrum_analyze → structured output
-- fetch + separate: short file → stem_separate → 4 stems
-- transcribe + isolate: polyphonic file → note_transcribe → note_isolate → quality-scored WAVs
+- import + analyze: local WAV → spectrum_analyze → structured output with mel spectrogram
+- import + separate: short file → stem_separate → 4 stems
+- Phase 2: transcribe + triage + isolate pipeline
 
 ### E2E tests
 
-- MCP tool listing: all 7 tools present
+- MCP tool listing: all 6 Phase 1 tools present (import_audio, stem_separate, audio_list_devices, audio_render, spectrum_analyze, audio_compare)
 - spectrum_analyze round-trip via MCP
 - audio_compare round-trip via MCP
 
 CI runs `pytest -m "not slow"`.
+
+## Decision Log
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-04-20 | Dropped YouTube download (yt-dlp) | YouTube ToS violation, active DMCA Section 1201 litigation. Users provide local files. |
+| 2026-04-20 | Replaced nussl with STFT TF-box masking | Simpler approach: note_isolate receives explicit time/freq bounds. Selection logic moved to separate note_triage tool. |
+| 2026-04-20 | Added CLAP embeddings to audio_compare | Mel spectrogram L2 alone lacks perceptual grounding. CLAP provides semantic similarity score. |
+| 2026-04-20 | Fallback workflow stops at isolated notes | Spectral-features-to-params loop is speculative without trained models. Manual evaluation first. |
+| 2026-04-20 | Basic Pitch license corrected to Apache 2.0 | Was incorrectly listed as MIT. |
 
 ## MCP Configuration
 
