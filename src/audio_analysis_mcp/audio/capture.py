@@ -2,12 +2,18 @@ import uuid
 from pathlib import Path
 from typing import Any
 import numpy as np
-import sounddevice as sd
 import soundfile as sf
+
+
+def _get_sd():  # type: ignore[no-untyped-def]
+    """Lazy-import sounddevice (requires PortAudio system library)."""
+    import sounddevice as sd
+    return sd
 
 
 def list_audio_devices() -> list[dict[str, Any]]:
     """List available audio input devices."""
+    sd = _get_sd()
     devices = sd.query_devices()
     if isinstance(devices, dict):
         devices = [devices]
@@ -21,6 +27,7 @@ def capture_audio(
     sample_rate: int = 44100,
 ) -> str:
     """Capture audio from an input device. Returns path to WAV file."""
+    sd = _get_sd()
     frames = int(duration * sample_rate)
     recording = sd.rec(
         frames=frames,
