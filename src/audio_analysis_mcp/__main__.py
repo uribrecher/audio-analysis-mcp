@@ -1,6 +1,5 @@
 from audio_analysis_mcp.server import mcp
 
-# Tool imports are added as tools are implemented (Tasks 3-7).
-# Each import triggers @mcp.tool() registration.
+import audio_analysis_mcp.tools.import_audio  # noqa: F401
 
 mcp.run(transport="stdio")
