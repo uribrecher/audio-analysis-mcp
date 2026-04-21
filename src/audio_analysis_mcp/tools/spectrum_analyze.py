@@ -25,8 +25,8 @@ def spectrum_analyze(
         audio_path,
         sr=44100,
         mono=True,
-        offset=start_time or 0.0,
-        duration=duration or 5.0,
+        offset=0.0 if start_time is None else start_time,
+        duration=5.0 if duration is None else duration,
     )
     sr = int(sr_val)
 

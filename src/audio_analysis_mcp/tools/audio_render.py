@@ -7,7 +7,7 @@ from audio_analysis_mcp.schemas import AudioRenderResult
 @mcp.tool()
 def audio_render(
     duration: float = 5.0,
-    device: str | None = None,
+    device: str | int | None = None,
     list_devices: bool = False,
 ) -> str:
     """Capture audio from a system audio device (BlackHole, USB audio).
@@ -26,6 +26,6 @@ def audio_render(
     return AudioRenderResult(
         audio_path=path,
         duration_seconds=duration,
-        device=device or "default",
+        device="default" if device is None else str(device),
         sample_rate=44100,
     ).model_dump_json(indent=2)

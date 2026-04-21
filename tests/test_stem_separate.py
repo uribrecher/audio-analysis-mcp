@@ -55,7 +55,8 @@ def test_stem_separate_uses_cache(sine_440_wav: Path, tmp_path: Path):
         result2 = stem_separate_impl(str(sine_440_wav), tmp_path, model_name="htdemucs")
 
     assert result2.cached is True
-    assert mock_get.call_count == 1  # model only loaded once
+    # get_model called both times (to read source_names), but apply_model only once
+    assert mock_get.call_count == 2
 
 
 def test_stem_separate_failure_raises(sine_440_wav: Path, tmp_path: Path):

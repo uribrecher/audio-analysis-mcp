@@ -258,7 +258,7 @@ Demucs stem separation into vocals, drums, bass, other (keyboards/synths).
 
 **Returns:** `StemSeparateResult` — paths to all stem WAV files. Cached by input hash.
 
-**Long-running:** 1-5 min. Runs as async subprocess with 10 min timeout.
+**Long-running:** 1-5 min. Uses the Demucs Python API synchronously with `torch.no_grad()` for reduced memory usage.
 
 ### 3. `audio_render`
 
@@ -276,7 +276,7 @@ Capture audio from a system audio device (BlackHole, USB audio).
 - The host process (Terminal, packaged .app) must have **Microphone** permission granted via System Settings > Privacy & Security > Microphone. This applies to virtual devices (BlackHole) identically to physical microphones — macOS TCC makes no distinction.
 - For a packaged .app: requires `com.apple.security.device.audio-input` entitlement and `NSMicrophoneUsageDescription` in Info.plist.
 - BlackHole itself requires one-time System Extension approval in System Settings.
-- The tool should detect permission denial and return a clear error message guiding the user to enable the required permission.
+- Planned improvement: detect microphone-permission denial explicitly and return a clear user-facing guidance error. Until that handling is implemented, permission failures surface as the underlying `sounddevice` exception.
 
 ### 4. `spectrum_analyze`
 
@@ -309,11 +309,11 @@ Compare target audio vs. synthesized attempt using mel spectrogram distance and 
 | target_path | string | yes | Reference audio |
 | rendered_path | string | yes | Synthesized attempt |
 
-**Returns:** `AudioCompareResult` — mel spectrogram L2 distance, CLAP cosine similarity (0-1), per-band energy diffs.
+**Returns:** `AudioCompareResult` — mel spectrogram L2 distance, CLAP cosine similarity (None until Phase 2), per-band energy diffs.
 
 **Approach:**
 1. **Mel spectrogram L2 distance** — compute mel spectrograms of both signals, normalize, take L2 distance. Fast, interpretable, good for low-level fidelity.
-2. **CLAP embedding cosine similarity** — pass both through LAION-CLAP encoder, compute cosine similarity. Captures perceptual/semantic similarity (is this the "same kind of sound"?).
+2. **CLAP embedding cosine similarity** (Phase 2) — pass both through LAION-CLAP encoder, compute cosine similarity. Currently returns `None`; will be implemented when the CLAP dependency is added.
 3. **Per-band energy comparison** — split into low/mid/high frequency bands, report energy differences in dB.
 
 ### 6. `note_transcribe`

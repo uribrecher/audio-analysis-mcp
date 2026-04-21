@@ -38,6 +38,7 @@ def capture_audio(
     )
     sd.wait()
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"render_{uuid.uuid4().hex[:8]}.wav"
     sf.write(str(output_path), recording, sample_rate, subtype="PCM_16")
     return str(output_path)
