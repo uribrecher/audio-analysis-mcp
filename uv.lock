@@ -60,7 +60,7 @@ dependencies = [
     { name = "torchaudio" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "mypy" },
     { name = "pytest" },
@@ -71,17 +71,20 @@ requires-dist = [
     { name = "demucs", specifier = ">=4.0.0" },
     { name = "librosa", specifier = ">=0.10.0" },
     { name = "mcp", specifier = ">=1.0.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "scipy", specifier = ">=1.10" },
     { name = "sounddevice", specifier = ">=0.4" },
     { name = "soundfile", specifier = ">=0.12" },
     { name = "torch", specifier = ">=2.0" },
     { name = "torchaudio", specifier = ">=2.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pytest", specifier = ">=8.0" },
+]
 
 [[package]]
 name = "audioop-lts"
