@@ -1,6 +1,6 @@
 # audio-analysis-mcp
 
-A Python MCP server providing audio analysis tools for AI-driven sound recreation. It fetches, separates, analyzes, and compares audio so an AI agent can configure hardware synthesizers to match a target sound.
+A Python MCP server providing audio analysis tools for AI-driven sound recreation. It imports, separates, analyzes, and compares audio so an AI agent can configure hardware synthesizers to match a target sound.
 
 ## Tools
 

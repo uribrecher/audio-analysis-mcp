@@ -84,7 +84,7 @@ def estimate_adsr(y: np.ndarray, sr: int) -> ADSREstimate:
     envelope = envelope / envelope.max()
     frame_ms = (hop / sr) * 1000
 
-    # If envelope is nearly flat (std < 5% of mean), there's no real attack
+    # If the normalized envelope is nearly flat (std < 0.05), there's no real attack
     if np.std(envelope) < 0.05:
         return ADSREstimate(
             attack_ms=0.0,

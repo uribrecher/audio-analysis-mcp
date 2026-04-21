@@ -19,6 +19,16 @@ class StemSeparateResult(BaseModel):
     cached: bool
 
 
+class AudioDevice(BaseModel):
+    name: str
+    index: int
+    max_input_channels: int
+
+
+class ListAudioDevicesResult(BaseModel):
+    devices: list[AudioDevice]
+
+
 class AudioRenderResult(BaseModel):
     audio_path: str
     duration_seconds: float

@@ -390,10 +390,10 @@ Once the research projects deliver trained models, the workflow extends with `en
 1. Scaffold: `pyproject.toml` (managed by `uv`), project structure, `server.py` with stdio transport, `schemas.py` with all Pydantic output models
 2. `workspace.py`: directory management
 3. `import_audio`: local file import + WAV normalization (44.1kHz 16-bit)
-4. `stem_separate`: Demucs subprocess with caching by input hash
-5. `audio_render`: sounddevice listing + capture + macOS permission detection
+4. `stem_separate`: Demucs Python API with caching by input hash
+5. `audio_list_devices` + `audio_render`: sounddevice listing + capture (macOS permissions documented)
 6. `spectrum_analyze`: mel spectrogram generation (librosa) + spectral features (harmonics, envelope, ADSR, modulation)
-7. `audio_compare`: mel spectrogram L2 distance + CLAP embedding cosine similarity + per-band diffs
+7. `audio_compare`: mel spectrogram L2 distance + per-band diffs (CLAP deferred to Phase 2)
 
 ### Phase 2: Note-Level Extraction
 

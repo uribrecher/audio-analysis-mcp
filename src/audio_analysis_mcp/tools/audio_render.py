@@ -1,14 +1,23 @@
-import json
 from audio_analysis_mcp.server import mcp, get_workspace
 from audio_analysis_mcp.audio.capture import list_audio_devices, capture_audio
-from audio_analysis_mcp.schemas import AudioRenderResult
+from audio_analysis_mcp.schemas import AudioDevice, AudioRenderResult, ListAudioDevicesResult
 
 
 @mcp.tool()
 def audio_list_devices() -> str:
     """List available audio input devices."""
-    devices = list_audio_devices()
-    return json.dumps(devices, indent=2, default=str)
+    raw = list_audio_devices()
+    result = ListAudioDevicesResult(
+        devices=[
+            AudioDevice(
+                name=d.get("name", ""),
+                index=d.get("index", 0),
+                max_input_channels=d.get("max_input_channels", 0),
+            )
+            for d in raw
+        ]
+    )
+    return result.model_dump_json(indent=2)
 
 
 @mcp.tool()
