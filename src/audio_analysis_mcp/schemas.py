@@ -16,6 +16,7 @@ class StemFile(BaseModel):
 class StemSeparateResult(BaseModel):
     stems: list[StemFile]
     model: str
+    preset: str
     cached: bool
 
 
