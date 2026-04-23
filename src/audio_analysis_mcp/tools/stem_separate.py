@@ -20,9 +20,9 @@ class SeparationPreset:
 
 
 PRESETS: dict[str, SeparationPreset] = {
-    "fast": SeparationPreset(model="htdemucs_6s", shifts=1, overlap=0.25),
-    "medium": SeparationPreset(model="htdemucs_6s", shifts=5, overlap=0.5),
-    "accurate": SeparationPreset(model="htdemucs_6s", shifts=10, overlap=0.75),
+    "fast": SeparationPreset(model="htdemucs_6s", shifts=1, overlap=0.1),
+    "medium": SeparationPreset(model="htdemucs_6s", shifts=3, overlap=0.25),
+    "accurate": SeparationPreset(model="htdemucs_6s", shifts=7, overlap=0.25),
 }
 
 

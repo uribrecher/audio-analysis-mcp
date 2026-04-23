@@ -44,15 +44,24 @@ All presets use `htdemucs_6s`:
 
 | Preset | Shifts | Overlap | Typical time (MPS, 4-min song) |
 |--------|--------|---------|-------------------------------|
-| fast | 1 | 0.25 | ~1 min |
-| medium | 5 | 0.5 | ~5 min |
-| accurate | 10 | 0.75 | ~10 min |
+| fast | 1 | 0.1 | ~1 min |
+| medium | 3 | 0.25 | ~3 min |
+| accurate | 7 | 0.25 | ~7 min |
 
 ## MCP vs CLI
 
 - MCP tool defaults to `fast` — suitable for quick exploration
 - CLI (`uv run python -m audio_analysis_mcp.cli.stem_separate`) for medium/accurate — shows live tqdm progress bar
 - Results are cached by `{file_hash}/{model}_{preset}` — re-runs are instant
+
+## Demucs tuning notes (from official readme)
+
+- **shifts**: "performs multiple predictions with random shifts of the input and averages them. Don't use it unless you have a GPU." Each shift = 1 full pass.
+- **overlap**: default 0.25 (25%). "Can probably be reduced to 0.1 to improve speed."
+- **-j flag**: parallel jobs, multiplies RAM usage proportionally
+- **segment**: controls split size. Default is model-dependent. Smaller segments use less GPU RAM but may reduce quality. Minimum useful value ~8.
+- **GPU RAM**: ~3GB minimum, ~7GB with default args. Set `PYTORCH_NO_CUDA_MEMORY_CACHING=1` for constrained GPUs.
+- **soundstretch/soundtouch**: needed for pitch/tempo augmentation (`brew install sound-touch` on macOS)
 
 ## Open questions
 
