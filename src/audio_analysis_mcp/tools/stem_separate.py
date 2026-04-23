@@ -117,7 +117,9 @@ def stem_separate_impl(
 
 @mcp.tool()
 def stem_separate(audio_path: str, preset: str = "fast") -> str:
-    """Separate audio into stems (vocals, drums, bass, other) using Demucs.
+    """Separate audio into stems using Demucs.
+
+    Returns 6 stems: vocals, drums, bass, other, guitar, piano.
 
     Defaults to 'fast' preset. For higher quality (medium/accurate), use the CLI instead:
       uv run python -m audio_analysis_mcp.cli.stem_separate <audio_path> --preset medium
