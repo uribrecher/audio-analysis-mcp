@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 import torch
 from demucs.pretrained import get_model
@@ -11,15 +12,26 @@ from audio_analysis_mcp.schemas import StemFile, StemSeparateResult
 MANIFEST_FILE = "sources.json"
 
 
+@dataclass(frozen=True)
+class SeparationPreset:
+    model: str
+    shifts: int
+    overlap: float
+
+
+PRESETS: dict[str, SeparationPreset] = {
+    "fast": SeparationPreset(model="htdemucs_6s", shifts=1, overlap=0.1),
+    "medium": SeparationPreset(model="htdemucs_6s", shifts=3, overlap=0.25),
+    "accurate": SeparationPreset(model="htdemucs_6s", shifts=7, overlap=0.25),
+}
+
+
 def _file_hash(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()[:16]
-
-
-ALLOWED_MODELS = {"htdemucs", "htdemucs_ft", "htdemucs_6s", "hdemucs_mmi", "mdx", "mdx_extra"}
 
 
 def _read_cached(cache_dir: Path) -> list[str] | None:
@@ -39,43 +51,56 @@ def _read_cached(cache_dir: Path) -> list[str] | None:
     return None
 
 
-def _sanitize_model_name(model_name: str) -> str:
-    """Validate model name to prevent path traversal."""
-    if model_name not in ALLOWED_MODELS:
+def _best_device() -> str:
+    """Auto-detect the best available compute device."""
+    if torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
+def _resolve_preset(preset_name: str) -> SeparationPreset:
+    """Validate and return a separation preset."""
+    if preset_name not in PRESETS:
         raise ValueError(
-            f"Unknown model: {model_name}. Allowed: {', '.join(sorted(ALLOWED_MODELS))}"
+            f"Unknown preset: {preset_name}. Allowed: {', '.join(sorted(PRESETS))}"
         )
-    return model_name
+    return PRESETS[preset_name]
 
 
 def stem_separate_impl(
-    audio_path: str, stems_dir: Path, model_name: str = "htdemucs"
+    audio_path: str, stems_dir: Path, preset_name: str = "medium"
 ) -> StemSeparateResult:
     """Run Demucs stem separation via Python API. Returns cached result if available."""
     if not Path(audio_path).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    safe_model = _sanitize_model_name(model_name)
+    preset = _resolve_preset(preset_name)
     fhash = _file_hash(audio_path)
-    cache_dir = stems_dir / fhash / safe_model
+    cache_dir = stems_dir / fhash / f"{preset.model}_{preset_name}"
 
     # Check cache without loading the model
     cached_sources = _read_cached(cache_dir)
     if cached_sources is not None:
         return StemSeparateResult(
             stems=[StemFile(stem=s, path=str(cache_dir / f"{s}.wav")) for s in cached_sources],
-            model=model_name,
+            model=preset.model,
+            preset=preset_name,
             cached=True,
         )
 
     # Cache miss — load model and run separation
-    model = get_model(model_name)
+    model = get_model(preset.model)
     model.eval()
     source_names = list(model.sources)
 
     wav = AudioFile(Path(audio_path)).read(streams=0, samplerate=model.samplerate, channels=model.audio_channels)  # type: ignore[no-untyped-call]
     with torch.no_grad():
-        sources = apply_model(model, wav[None], device="cpu")[0]
+        sources = apply_model(
+            model, wav[None], device=_best_device(),
+            shifts=preset.shifts, overlap=preset.overlap, progress=True,
+        )[0]
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     for i, source_name in enumerate(source_names):
@@ -84,14 +109,21 @@ def stem_separate_impl(
 
     return StemSeparateResult(
         stems=[StemFile(stem=s, path=str(cache_dir / f"{s}.wav")) for s in source_names],
-        model=model_name,
+        model=preset.model,
+        preset=preset_name,
         cached=False,
     )
 
 
 @mcp.tool()
-def stem_separate(audio_path: str, model: str = "htdemucs") -> str:
-    """Separate audio into stems (vocals, drums, bass, other) using Demucs."""
+def stem_separate(audio_path: str, preset: str = "fast") -> str:
+    """Separate audio into stems using Demucs.
+
+    Returns 6 stems: vocals, drums, bass, other, guitar, piano.
+
+    Defaults to 'fast' preset. For higher quality (medium/accurate), use the CLI instead:
+      uv run python -m audio_analysis_mcp.cli.stem_separate <audio_path> --preset medium
+    """
     ws = get_workspace()
-    result = stem_separate_impl(audio_path, ws.stems, model)
+    result = stem_separate_impl(audio_path, ws.stems, preset_name=preset)
     return result.model_dump_json(indent=2)
