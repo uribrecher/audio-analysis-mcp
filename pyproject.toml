@@ -8,6 +8,7 @@ dependencies = [
   "librosa>=0.10.0",
   "torch>=2.0",
   "torchaudio>=2.0",
+  "torchcodec>=0.1",
   "numpy>=1.24",
   "scipy>=1.10",
   "soundfile>=0.12",
@@ -40,5 +41,6 @@ module = [
   "soundfile.*",
   "scipy.*",
   "demucs.*",
+  "tqdm.*",
 ]
 ignore_missing_imports = true
