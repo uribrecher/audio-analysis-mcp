@@ -100,7 +100,12 @@ def test_preset_passes_correct_args_to_apply_model(sine_440_wav: Path, tmp_path:
 
 
 def test_different_presets_use_separate_cache(sine_440_wav: Path, tmp_path: Path):
-    """Fast and medium presets should not share cache entries."""
+    """Fast and medium presets should not share cache entries.
+
+    In the job-centric workspace, each preset gets its own directory
+    (handled by job_stems_dir). stem_separate_impl uses stems_dir directly
+    as the cache directory, so different dirs = no cache sharing.
+    """
     model = _make_mock_model()
     sources_tensor = torch.zeros(1, 4, 2, 44100)
 
@@ -108,10 +113,10 @@ def test_different_presets_use_separate_cache(sine_440_wav: Path, tmp_path: Path
          patch("audio_analysis_mcp.tools.stem_separate.apply_model", return_value=sources_tensor) as mock_apply, \
          patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
          patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
-        result_fast = stem_separate_impl(str(sine_440_wav), tmp_path, preset_name="fast")
-        result_medium = stem_separate_impl(str(sine_440_wav), tmp_path, preset_name="medium")
+        result_fast = stem_separate_impl(str(sine_440_wav), tmp_path / "fast", preset_name="fast")
+        result_medium = stem_separate_impl(str(sine_440_wav), tmp_path / "medium", preset_name="medium")
 
-    # Both should be uncached since they use different presets
+    # Both should be uncached since they use different directories
     assert result_fast.cached is False
     assert result_medium.cached is False
     assert mock_apply.call_count == 2

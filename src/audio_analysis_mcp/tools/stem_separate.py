@@ -1,4 +1,3 @@
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +6,7 @@ from demucs.pretrained import get_model
 from demucs.apply import apply_model
 from demucs.audio import AudioFile, save_audio
 from audio_analysis_mcp.server import mcp, get_workspace
+from audio_analysis_mcp.workspace import resolve_job_context
 from audio_analysis_mcp.schemas import StemFile, StemSeparateResult
 
 MANIFEST_FILE = "sources.json"
@@ -24,14 +24,6 @@ PRESETS: dict[str, SeparationPreset] = {
     "medium": SeparationPreset(model="htdemucs_6s", shifts=3, overlap=0.25),
     "accurate": SeparationPreset(model="htdemucs_6s", shifts=7, overlap=0.25),
 }
-
-
-def _file_hash(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()[:16]
 
 
 def _read_cached(cache_dir: Path) -> list[str] | None:
@@ -77,10 +69,9 @@ def stem_separate_impl(
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
     preset = _resolve_preset(preset_name)
-    fhash = _file_hash(audio_path)
-    cache_dir = stems_dir / fhash / f"{preset.model}_{preset_name}"
+    cache_dir = stems_dir
 
-    # Check cache without loading the model
+    # Check cache
     cached_sources = _read_cached(cache_dir)
     if cached_sources is not None:
         return StemSeparateResult(
@@ -119,11 +110,12 @@ def stem_separate_impl(
 def stem_separate(audio_path: str, preset: str = "fast") -> str:
     """Separate audio into stems using Demucs.
 
+    Input must be inside a job folder (use import_audio first).
     Returns 6 stems: vocals, drums, bass, other, guitar, piano.
-
-    Defaults to 'fast' preset. For higher quality (medium/accurate), use the CLI instead:
-      uv run python -m audio_analysis_mcp.cli.stem_separate <audio_path> --preset medium
     """
+    _resolve_preset(preset)
     ws = get_workspace()
-    result = stem_separate_impl(audio_path, ws.stems, preset_name=preset)
+    ctx = resolve_job_context(audio_path, ws)
+    stems_dir = ws.job_stems_dir(ctx.job_name, preset)
+    result = stem_separate_impl(audio_path, stems_dir, preset_name=preset)
     return result.model_dump_json(indent=2)

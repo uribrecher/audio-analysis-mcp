@@ -1,6 +1,12 @@
 """E2E tests: call MCP tool functions directly and verify JSON output."""
 import json
+import shutil
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import numpy as np
+import pretty_midi
+import pytest
 
 import audio_analysis_mcp.server as srv
 from audio_analysis_mcp.workspace import Workspace
@@ -11,8 +17,9 @@ import audio_analysis_mcp.tools.stem_separate  # noqa: F401
 import audio_analysis_mcp.tools.audio_render  # noqa: F401
 import audio_analysis_mcp.tools.spectrum_analyze  # noqa: F401
 import audio_analysis_mcp.tools.audio_compare  # noqa: F401
-
-import pytest
+import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
+import audio_analysis_mcp.tools.note_triage  # noqa: F401
+import audio_analysis_mcp.tools.note_isolate  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +36,9 @@ def test_import_audio_e2e(sine_440_wav: Path):
     result = json.loads(import_audio(file_path=str(sine_440_wav)))
     assert result["sample_rate"] == 44100
     assert result["channels"] == 1
+    assert result["job_name"] == "sine-440"
     assert Path(result["audio_path"]).exists()
+    assert "jobs/sine-440/source.wav" in result["audio_path"]
 
 
 def test_spectrum_analyze_e2e(sine_440_wav: Path):
@@ -52,3 +61,63 @@ def test_audio_compare_e2e(sine_440_wav: Path, square_440_wav: Path):
     )
     assert result["mel_spectrogram_distance"] > 0
     assert len(result["band_diffs"]) >= 3
+
+
+
+def _mock_predict_result(notes: list[tuple[float, float, int, float]]):
+    model_output = {"note": np.zeros((1, 1)), "onset": np.zeros((1, 1))}
+    midi_data = pretty_midi.PrettyMIDI()
+    inst = pretty_midi.Instrument(program=0)
+    for start, end, pitch, vel in notes:
+        note = pretty_midi.Note(
+            velocity=int(vel * 127), pitch=pitch, start=start, end=end,
+        )
+        inst.notes.append(note)
+    midi_data.instruments.append(inst)
+    note_events = [(s, e, p, v, None) for s, e, p, v in notes]
+    return model_output, midi_data, note_events
+
+
+@patch("audio_analysis_mcp.analysis.transcription.predict")
+def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path):
+    from audio_analysis_mcp.tools.note_transcribe import note_transcribe
+
+    # Set up a job folder with a stem file
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    shutil.copy(sine_440_wav, stem_file)
+
+    mock_predict.return_value = _mock_predict_result([
+        (0.05, 0.95, 69, 0.8),
+    ])
+    result = json.loads(note_transcribe(audio_path=str(stem_file)))
+    assert Path(result["midi_path"]).exists()
+    assert Path(result["notes_path"]).exists()
+    assert result["note_count"] == 1
+    assert "test-song/transcriptions/bass_fast" in result["midi_path"]
+
+
+def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
+    from audio_analysis_mcp.tools.note_isolate import note_isolate
+
+    # Set up a job folder with a stem file
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    shutil.copy(sine_440_wav, stem_file)
+
+    result = json.loads(
+        note_isolate(
+            audio_path=str(stem_file),
+            start_time=0.0,
+            end_time=0.5,
+            start_freq=400.0,
+            end_freq=500.0,
+            pitch_midi=69,
+        )
+    )
+    assert Path(result["audio_path"]).exists()
+    assert result["duration_seconds"] > 0
+    assert "note_001_A4_0.0s.wav" in result["audio_path"]
+    assert "test-song/isolated_notes/bass_fast" in result["audio_path"]

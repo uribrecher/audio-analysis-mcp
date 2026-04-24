@@ -7,15 +7,18 @@ A Python MCP server providing audio analysis tools for AI-driven sound recreatio
 | Tool | Description |
 |------|-------------|
 | `import_audio` | Import a local audio file, normalize to 44.1kHz 16-bit mono WAV |
-| `stem_separate` | Separate audio into stems (vocals, drums, bass, other) using Demucs |
+| `stem_separate` | Separate audio into stems (vocals, drums, bass, other, guitar, piano) using Demucs |
 | `audio_list_devices` | List available audio input devices |
 | `audio_render` | Capture audio from a system device (BlackHole, USB audio) |
 | `spectrum_analyze` | Extract mel spectrogram, spectral features, ADSR, and modulation |
 | `audio_compare` | Compare target vs. synthesized audio (mel spectrogram distance, per-band energy) |
+| `note_transcribe` | Polyphonic transcription via Basic Pitch — outputs MIDI + note events JSON |
+| `note_triage` | Analyze transcription, select best candidate notes for isolation |
+| `note_isolate` | Isolate a note from audio within a time-frequency box via STFT masking |
 
 ## Setup
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11 and [uv](https://docs.astral.sh/uv/). (Pinned to 3.11 because Basic Pitch requires CoreML/TensorFlow which doesn't support 3.12+.)
 
 ```bash
 uv sync --dev
