@@ -1,3 +1,5 @@
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
 import uuid
 
@@ -14,7 +16,10 @@ def transcribe_audio(
 
     Returns (midi_path, note_events).
     """
-    model_output, midi_data, note_events = predict(audio_path)
+    # basic_pitch.predict writes debug output to stdout which corrupts
+    # the MCP stdio transport — suppress it
+    with redirect_stdout(io.StringIO()):
+        model_output, midi_data, note_events = predict(audio_path)
 
     # Save MIDI file
     out = Path(output_dir)
