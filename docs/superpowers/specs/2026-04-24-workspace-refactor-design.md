@@ -102,10 +102,10 @@ Return schema changes to:
 class NoteTriageResult(BaseModel):
     triage_path: str
     candidate_count: int
-    top_candidate_summary: str  # e.g. "F1 at 94.3s (score 2.78)"
+    top_candidates: list[CandidateNote]  # top 5 candidates with full isolation params
 ```
 
-The full triage data (polyphony profile + candidates) is in the JSON file.
+The full triage data (polyphony profile + all candidates) is in the JSON file. The `top_candidates` field returns the top 5 candidates inline for direct use by `note_isolate`.
 
 ### `note_isolate`
 
@@ -160,10 +160,10 @@ class ImportAudioResult(BaseModel):
 class NoteTriageResult(BaseModel):
     triage_path: str
     candidate_count: int
-    top_candidate_summary: str
+    top_candidates: list[CandidateNote]
 ```
 
-The full triage data (polyphony profile + candidates list) is written to the JSON file. The file contains:
+The full triage data (polyphony profile + all candidates) is written to the JSON file. The `top_candidates` field returns the top 5 inline for direct use by `note_isolate`. The file contains:
 
 ```python
 class NoteTriageFileData(BaseModel):

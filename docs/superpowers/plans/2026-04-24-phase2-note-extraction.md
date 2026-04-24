@@ -6,7 +6,7 @@
 
 **Architecture:** Each tool follows the existing pattern: pure logic in `analysis/` module, thin MCP wrapper in `tools/`, Pydantic schemas in `schemas.py`. Basic Pitch (ONNX backend) handles polyphonic transcription. STFT time-frequency masking handles note isolation.
 
-**Tech Stack:** Python 3.12, FastMCP, basic-pitch[onnx], librosa, numpy, scipy, pydantic, pytest
+**Tech Stack:** Python 3.11, FastMCP, basic-pitch (CoreML backend on macOS), librosa, numpy, scipy, pydantic, pytest
 
 ---
 
@@ -14,7 +14,7 @@
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `pyproject.toml` | Modify | Add `basic-pitch[onnx]` dependency |
+| `pyproject.toml` | Modify | Add `basic-pitch>=0.4.0` dependency |
 | `src/audio_analysis_mcp/schemas.py` | Modify | Add 6 Pydantic models |
 | `src/audio_analysis_mcp/analysis/transcription.py` | Create | Basic Pitch wrapper → NoteEvent list |
 | `src/audio_analysis_mcp/analysis/note_triage.py` | Create | Polyphony profiling + candidate ranking |
@@ -42,7 +42,7 @@
 In `pyproject.toml`, add to the `dependencies` list:
 
 ```toml
-  "basic-pitch[onnx]>=0.6.0",
+  "basic-pitch>=0.4.0",
 ```
 
 - [ ] **Step 2: Install dependencies**

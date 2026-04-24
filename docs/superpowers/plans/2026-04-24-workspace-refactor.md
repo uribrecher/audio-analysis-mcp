@@ -60,7 +60,7 @@ def test_sanitize_multiple_spaces():
 
 
 def test_sanitize_unicode():
-    assert sanitize_job_name("café naïve.wav") == "caf-nave"
+    assert sanitize_job_name("café naïve.wav") == "caf-na-ve"
 
 
 def test_sanitize_dots_and_underscores():

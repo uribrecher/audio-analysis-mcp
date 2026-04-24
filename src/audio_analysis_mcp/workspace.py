@@ -18,6 +18,8 @@ def sanitize_job_name(filename: str) -> str:
     name = re.sub(r"-+", "-", name)
     # Trim leading/trailing hyphens
     name = name.strip("-")
+    if not name:
+        raise ValueError(f"Cannot derive a job name from filename: {filename}")
     return name
 
 

@@ -1,5 +1,10 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 import librosa
+
+NDArray = npt.NDArray[Any]
 
 
 def isolate_note(
@@ -11,7 +16,7 @@ def isolate_note(
     sr: int = 44100,
     n_fft: int = 2048,
     hop_length: int = 512,
-) -> tuple[np.ndarray[np.float32, np.dtype[np.float32]], int]:
+) -> tuple[NDArray, int]:
     """Apply time-frequency box mask via STFT to isolate a note.
 
     Returns (isolated_audio_array, sample_rate).
@@ -36,5 +41,5 @@ def isolate_note(
     S_masked = S * freq_mask[:, np.newaxis]
 
     # Inverse STFT
-    y_isolated: np.ndarray[np.float32, np.dtype[np.float32]] = librosa.istft(S_masked, hop_length=hop_length)
+    y_isolated: NDArray = librosa.istft(S_masked, hop_length=hop_length)
     return y_isolated, sr

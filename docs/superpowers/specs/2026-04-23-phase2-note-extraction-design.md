@@ -16,11 +16,11 @@ stem_separate → other.wav
             note_isolate     (STFT TF-box masking → clean WAV per note)
 ```
 
-## Decision: Basic Pitch with ONNX Backend
+## Decision: Basic Pitch with CoreML Backend
 
-Use `basic-pitch[onnx]` (Apache 2.0, Spotify) instead of the default TensorFlow backend. Rationale: PyTorch is already in the stack for Demucs — adding TensorFlow would bloat the install. ONNX Runtime is lightweight and sufficient.
+Use `basic-pitch>=0.4.0` (Apache 2.0, Spotify). On macOS it auto-selects the CoreML backend. The `[onnx]` extra does not exist in the published package. Python is pinned to 3.11 because Basic Pitch's TensorFlow/CoreML dependencies don't support 3.12+.
 
-**New dependency:** `basic-pitch[onnx]` in `pyproject.toml`.
+**New dependency:** `basic-pitch>=0.4.0` in `pyproject.toml`.
 
 ## Decision: Frequency Bounds from MIDI Pitch
 
@@ -252,7 +252,7 @@ class NoteIsolateResult(BaseModel):
 
 | File | Change |
 |------|--------|
-| `pyproject.toml` | Add `basic-pitch[onnx]` dependency |
+| `pyproject.toml` | Add `basic-pitch>=0.4.0` dependency |
 | `src/audio_analysis_mcp/schemas.py` | Add 6 new Pydantic models |
 | `src/audio_analysis_mcp/__main__.py` | Add 3 tool imports |
 | `tests/conftest.py` | Add fixtures for two-note audio, chord audio |

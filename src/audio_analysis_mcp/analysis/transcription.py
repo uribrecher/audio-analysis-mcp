@@ -2,7 +2,6 @@ from contextlib import redirect_stdout
 import io
 import json
 from pathlib import Path
-import uuid
 
 from basic_pitch.inference import predict
 
@@ -25,9 +24,8 @@ def transcribe_audio(
     # Save files
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    file_id = uuid.uuid4().hex[:8]
-    midi_path = out / f"transcription_{file_id}.mid"
-    notes_path = out / f"transcription_{file_id}.json"
+    midi_path = out / "transcription.mid"
+    notes_path = out / "transcription.json"
     midi_data.write(str(midi_path))
 
     # Convert to NoteEvent schema

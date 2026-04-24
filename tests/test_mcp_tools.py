@@ -1,6 +1,12 @@
 """E2E tests: call MCP tool functions directly and verify JSON output."""
 import json
+import shutil
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import numpy as np
+import pretty_midi
+import pytest
 
 import audio_analysis_mcp.server as srv
 from audio_analysis_mcp.workspace import Workspace
@@ -14,8 +20,6 @@ import audio_analysis_mcp.tools.audio_compare  # noqa: F401
 import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
 import audio_analysis_mcp.tools.note_triage  # noqa: F401
 import audio_analysis_mcp.tools.note_isolate  # noqa: F401
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -59,10 +63,6 @@ def test_audio_compare_e2e(sine_440_wav: Path, square_440_wav: Path):
     assert len(result["band_diffs"]) >= 3
 
 
-from unittest.mock import patch, MagicMock
-import numpy as np
-import pretty_midi
-
 
 def _mock_predict_result(notes: list[tuple[float, float, int, float]]):
     model_output = {"note": np.zeros((1, 1)), "onset": np.zeros((1, 1))}
@@ -86,7 +86,6 @@ def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_pa
     stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
     stem_dir.mkdir(parents=True)
     stem_file = stem_dir / "bass.wav"
-    import shutil
     shutil.copy(sine_440_wav, stem_file)
 
     mock_predict.return_value = _mock_predict_result([
@@ -106,7 +105,6 @@ def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
     stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
     stem_dir.mkdir(parents=True)
     stem_file = stem_dir / "bass.wav"
-    import shutil
     shutil.copy(sine_440_wav, stem_file)
 
     result = json.loads(
