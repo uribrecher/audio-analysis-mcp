@@ -69,7 +69,7 @@ def stem_separate_impl(
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
     preset = _resolve_preset(preset_name)
-    cache_dir = stems_dir / f"{preset.model}_{preset_name}"
+    cache_dir = stems_dir
 
     # Check cache
     cached_sources = _read_cached(cache_dir)
