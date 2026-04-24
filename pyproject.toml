@@ -43,5 +43,7 @@ module = [
   "scipy.*",
   "demucs.*",
   "tqdm.*",
+  "basic_pitch.*",
+  "pretty_midi.*",
 ]
 ignore_missing_imports = true
