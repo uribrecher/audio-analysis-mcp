@@ -32,7 +32,9 @@ def test_import_audio_e2e(sine_440_wav: Path):
     result = json.loads(import_audio(file_path=str(sine_440_wav)))
     assert result["sample_rate"] == 44100
     assert result["channels"] == 1
+    assert result["job_name"] == "sine-440"
     assert Path(result["audio_path"]).exists()
+    assert "jobs/sine-440/source.wav" in result["audio_path"]
 
 
 def test_spectrum_analyze_e2e(sine_440_wav: Path):
