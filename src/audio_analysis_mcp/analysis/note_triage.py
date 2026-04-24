@@ -5,7 +5,7 @@ from audio_analysis_mcp.schemas import (
     NoteEvent,
     PolyphonyWindow,
     CandidateNote,
-    NoteTriageResult,
+    NoteTriageFileData,
 )
 
 WINDOW_SIZE = 0.5  # seconds
@@ -86,12 +86,12 @@ def triage_notes(
     notes: list[NoteEvent],
     min_duration: float = 0.5,
     max_candidates: int = 10,
-) -> NoteTriageResult:
+) -> NoteTriageFileData:
     """Profile polyphony and rank candidate notes for isolation."""
     profile = _build_polyphony_profile(notes)
 
     if not notes:
-        return NoteTriageResult(polyphony_profile=[], candidates=[])
+        return NoteTriageFileData(polyphony_profile=[], candidates=[])
 
     # Filter by duration
     eligible = [n for n in notes if (n.end_time - n.start_time) >= min_duration]
@@ -133,4 +133,4 @@ def triage_notes(
             )
         )
 
-    return NoteTriageResult(polyphony_profile=profile, candidates=candidates)
+    return NoteTriageFileData(polyphony_profile=profile, candidates=candidates)

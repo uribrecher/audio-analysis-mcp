@@ -2,9 +2,17 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from audio_analysis_mcp.server import mcp
+from audio_analysis_mcp.server import mcp, get_workspace
+from audio_analysis_mcp.workspace import resolve_job_context
 from audio_analysis_mcp.analysis.note_triage import triage_notes
-from audio_analysis_mcp.schemas import NoteEvent
+from audio_analysis_mcp.schemas import NoteEvent, NoteTriageResult
+
+
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _midi_to_name(midi: int) -> str:
+    return NOTE_NAMES[midi % 12] + str(midi // 12 - 1)
 
 
 @mcp.tool()
@@ -14,13 +22,41 @@ def note_triage(
     min_duration: float = 0.5,
     max_candidates: int = 10,
 ) -> str:
-    """Analyze transcription and select best candidate notes for isolation."""
+    """Analyze transcription and select best candidate notes for isolation.
+
+    notes_path must be the JSON file from note_transcribe.
+    """
+    ws = get_workspace()
+    ctx = resolve_job_context(audio_path, ws)
+    if ctx.stem is None or ctx.preset is None:
+        raise ValueError(
+            f"Expected a stem file (jobs/<job>/stems/<preset>/<stem>.wav), got: {audio_path}"
+        )
+
     adapter = TypeAdapter(list[NoteEvent])
     notes_json = Path(notes_path).read_text()
     notes = adapter.validate_json(notes_json)
-    result = triage_notes(
+
+    file_data = triage_notes(
         notes=notes,
         min_duration=min_duration,
         max_candidates=max_candidates,
     )
-    return result.model_dump_json(indent=2)
+
+    # Write full triage data to file
+    triage_dir = ws.job_triage_dir(ctx.job_name, ctx.stem, ctx.preset)
+    triage_path = triage_dir / "triage.json"
+    triage_path.write_text(file_data.model_dump_json(indent=2))
+
+    # Build summary
+    top_summary = "no candidates"
+    if file_data.candidates:
+        top = file_data.candidates[0]
+        name = _midi_to_name(top.note.pitch_midi)
+        top_summary = f"{name} at {top.start_time:.1f}s (score {top.score:.2f})"
+
+    return NoteTriageResult(
+        triage_path=str(triage_path),
+        candidate_count=len(file_data.candidates),
+        top_candidate_summary=top_summary,
+    ).model_dump_json(indent=2)
