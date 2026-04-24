@@ -113,6 +113,7 @@ def stem_separate(audio_path: str, preset: str = "fast") -> str:
     Input must be inside a job folder (use import_audio first).
     Returns 6 stems: vocals, drums, bass, other, guitar, piano.
     """
+    _resolve_preset(preset)
     ws = get_workspace()
     ctx = resolve_job_context(audio_path, ws)
     stems_dir = ws.job_stems_dir(ctx.job_name, preset)

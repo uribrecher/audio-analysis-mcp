@@ -33,10 +33,9 @@ class JobContext:
 def resolve_job_context(path: str, workspace: "Workspace") -> JobContext:
     """Parse job name, stem, and preset from a path within the workspace.
 
-    Expects paths like:
-      jobs/<job>/source.wav
-      jobs/<job>/stems/<preset>/<stem>.wav
-      jobs/<job>/transcriptions/<stem>_<preset>/transcription.json
+    Supported path patterns:
+      jobs/<job>/source.wav                     → JobContext(job_name)
+      jobs/<job>/stems/<preset>/<stem>.wav      → JobContext(job_name, stem, preset)
     """
     p = Path(path).resolve()
     root = workspace.root.resolve()

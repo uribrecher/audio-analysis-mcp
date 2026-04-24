@@ -4,7 +4,7 @@
 
 **Goal:** Add three MCP tools (`note_transcribe`, `note_triage`, `note_isolate`) that extract clean, isolated single-note WAV files from keyboard stems.
 
-**Architecture:** Each tool follows the existing pattern: pure logic in `analysis/` module, thin MCP wrapper in `tools/`, Pydantic schemas in `schemas.py`. Basic Pitch (ONNX backend) handles polyphonic transcription. STFT time-frequency masking handles note isolation.
+**Architecture:** Each tool follows the existing pattern: pure logic in `analysis/` module, thin MCP wrapper in `tools/`, Pydantic schemas in `schemas.py`. Basic Pitch (CoreML backend on macOS) handles polyphonic transcription. STFT time-frequency masking handles note isolation.
 
 **Tech Stack:** Python 3.11, FastMCP, basic-pitch (CoreML backend on macOS), librosa, numpy, scipy, pydantic, pytest
 
