@@ -5,5 +5,8 @@ import audio_analysis_mcp.tools.stem_separate  # noqa: F401
 import audio_analysis_mcp.tools.audio_render  # noqa: F401
 import audio_analysis_mcp.tools.spectrum_analyze  # noqa: F401
 import audio_analysis_mcp.tools.audio_compare  # noqa: F401
+import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
+import audio_analysis_mcp.tools.note_triage  # noqa: F401
+import audio_analysis_mcp.tools.note_isolate  # noqa: F401
 
 mcp.run(transport="stdio")
