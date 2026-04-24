@@ -79,16 +79,24 @@ def _mock_predict_result(notes: list[tuple[float, float, int, float]]):
 
 
 @patch("audio_analysis_mcp.analysis.transcription.predict")
-def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path):
+def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path):
     from audio_analysis_mcp.tools.note_transcribe import note_transcribe
+
+    # Set up a job folder with a stem file
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    import shutil
+    shutil.copy(sine_440_wav, stem_file)
 
     mock_predict.return_value = _mock_predict_result([
         (0.05, 0.95, 69, 0.8),
     ])
-    result = json.loads(note_transcribe(audio_path=str(sine_440_wav)))
+    result = json.loads(note_transcribe(audio_path=str(stem_file)))
     assert Path(result["midi_path"]).exists()
     assert Path(result["notes_path"]).exists()
     assert result["note_count"] == 1
+    assert "test-song/transcriptions/bass_fast" in result["midi_path"]
 
 
 def test_note_isolate_e2e(sine_440_wav: Path):
