@@ -99,17 +99,27 @@ def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_pa
     assert "test-song/transcriptions/bass_fast" in result["midi_path"]
 
 
-def test_note_isolate_e2e(sine_440_wav: Path):
+def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
     from audio_analysis_mcp.tools.note_isolate import note_isolate
+
+    # Set up a job folder with a stem file
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    import shutil
+    shutil.copy(sine_440_wav, stem_file)
 
     result = json.loads(
         note_isolate(
-            audio_path=str(sine_440_wav),
+            audio_path=str(stem_file),
             start_time=0.0,
             end_time=0.5,
             start_freq=400.0,
             end_freq=500.0,
+            pitch_midi=69,
         )
     )
     assert Path(result["audio_path"]).exists()
     assert result["duration_seconds"] > 0
+    assert "note_001_A4_0.0s.wav" in result["audio_path"]
+    assert "test-song/isolated_notes/bass_fast" in result["audio_path"]
