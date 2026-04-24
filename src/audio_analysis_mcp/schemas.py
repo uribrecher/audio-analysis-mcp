@@ -96,7 +96,8 @@ class NoteEvent(BaseModel):
 
 class NoteTranscribeResult(BaseModel):
     midi_path: str
-    notes: list[NoteEvent]
+    notes_path: str
+    note_count: int
 
 
 class PolyphonyWindow(BaseModel):

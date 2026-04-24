@@ -85,8 +85,8 @@ def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path):
     ])
     result = json.loads(note_transcribe(audio_path=str(sine_440_wav)))
     assert Path(result["midi_path"]).exists()
-    assert len(result["notes"]) == 1
-    assert result["notes"][0]["pitch_midi"] == 69
+    assert Path(result["notes_path"]).exists()
+    assert result["note_count"] == 1
 
 
 def test_note_isolate_e2e(sine_440_wav: Path):

@@ -1,5 +1,6 @@
 from contextlib import redirect_stdout
 import io
+import json
 from pathlib import Path
 import uuid
 
@@ -11,20 +12,22 @@ from audio_analysis_mcp.schemas import NoteEvent
 def transcribe_audio(
     audio_path: str,
     output_dir: str,
-) -> tuple[str, list[NoteEvent]]:
+) -> tuple[str, str, list[NoteEvent]]:
     """Run Basic Pitch on audio file.
 
-    Returns (midi_path, note_events).
+    Returns (midi_path, notes_json_path, note_events).
     """
     # basic_pitch.predict writes debug output to stdout which corrupts
     # the MCP stdio transport — suppress it
     with redirect_stdout(io.StringIO()):
         model_output, midi_data, note_events = predict(audio_path)
 
-    # Save MIDI file
+    # Save files
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    midi_path = out / f"transcription_{uuid.uuid4().hex[:8]}.mid"
+    file_id = uuid.uuid4().hex[:8]
+    midi_path = out / f"transcription_{file_id}.mid"
+    notes_path = out / f"transcription_{file_id}.json"
     midi_data.write(str(midi_path))
 
     # Convert to NoteEvent schema
@@ -39,4 +42,10 @@ def transcribe_audio(
                 pitch_bends=list(pitch_bends) if pitch_bends is not None else None,
             )
         )
-    return str(midi_path), notes
+
+    # Save notes JSON sidecar
+    notes_path.write_text(
+        json.dumps([n.model_dump() for n in notes], indent=2)
+    )
+
+    return str(midi_path), str(notes_path), notes
