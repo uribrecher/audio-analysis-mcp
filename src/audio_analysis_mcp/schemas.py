@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class ImportAudioResult(BaseModel):
     audio_path: str
+    job_name: str
     sample_rate: int
     duration_seconds: float
     channels: int
@@ -115,9 +116,17 @@ class CandidateNote(BaseModel):
     end_freq: float
 
 
-class NoteTriageResult(BaseModel):
+class NoteTriageFileData(BaseModel):
+    """Full triage data written to the JSON file."""
     polyphony_profile: list[PolyphonyWindow]
     candidates: list[CandidateNote]
+
+
+class NoteTriageResult(BaseModel):
+    """Lightweight result returned by the MCP tool."""
+    triage_path: str
+    candidate_count: int
+    top_candidate_summary: str
 
 
 class NoteIsolateResult(BaseModel):
