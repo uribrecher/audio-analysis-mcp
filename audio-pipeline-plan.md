@@ -395,7 +395,7 @@ Once the research projects deliver trained models, the workflow extends with `en
 6. `spectrum_analyze`: mel spectrogram generation (librosa) + spectral features (harmonics, envelope, ADSR, modulation)
 7. `audio_compare`: mel spectrogram L2 distance + per-band diffs (CLAP deferred to Phase 2)
 
-### Phase 2: Note-Level Extraction
+### Phase 2: Note-Level Extraction ✅
 
 8. `analysis/transcription.py`: Basic Pitch integration → NoteTranscribeResult
 9. `note_transcribe` tool: wire transcription module to MCP
