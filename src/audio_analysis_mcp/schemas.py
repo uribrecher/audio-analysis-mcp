@@ -84,3 +84,41 @@ class AudioCompareResult(BaseModel):
     mel_spectrogram_distance: float
     clap_cosine_similarity: float | None
     band_diffs: list[BandDiff]
+
+
+class NoteEvent(BaseModel):
+    start_time: float
+    end_time: float
+    pitch_midi: int
+    amplitude: float
+    pitch_bends: list[int] | None
+
+
+class NoteTranscribeResult(BaseModel):
+    midi_path: str
+    notes: list[NoteEvent]
+
+
+class PolyphonyWindow(BaseModel):
+    start_time: float
+    end_time: float
+    note_count: int
+
+
+class CandidateNote(BaseModel):
+    note: NoteEvent
+    score: float
+    start_time: float
+    end_time: float
+    start_freq: float
+    end_freq: float
+
+
+class NoteTriageResult(BaseModel):
+    polyphony_profile: list[PolyphonyWindow]
+    candidates: list[CandidateNote]
+
+
+class NoteIsolateResult(BaseModel):
+    audio_path: str
+    duration_seconds: float
