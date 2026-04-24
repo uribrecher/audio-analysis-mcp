@@ -53,7 +53,7 @@ Default: include up to the 8th harmonic or 10kHz, whichever is lower.
 | end_time | float | Note offset (seconds) |
 | pitch_midi | int | MIDI note number (0-127) |
 | amplitude | float | Velocity/amplitude (0.0-1.0) |
-| pitch_bend | float | Pitch bend in semitones |
+| pitch_bends | list[int] \| None | Raw MIDI pitch bend values per frame (centered at 8192), None if absent |
 
 ### Logic Module: `analysis/transcription.py`
 
@@ -204,7 +204,7 @@ class NoteEvent(BaseModel):
     end_time: float
     pitch_midi: int
     amplitude: float
-    pitch_bend: float
+    pitch_bends: list[int] | None
 
 class NoteTranscribeResult(BaseModel):
     midi_path: str
@@ -266,7 +266,7 @@ class NoteIsolateResult(BaseModel):
 
 - Single-note sine (A4/440Hz, 1s) → 1 NoteEvent, pitch_midi == 69, times within tolerance
 - Two simultaneous sines (C4 + E4) → 2 NoteEvents with correct pitches (60, 64)
-- All NoteEvent fields populated (start_time, end_time, pitch_midi, amplitude, pitch_bend)
+- All NoteEvent fields populated (start_time, end_time, pitch_midi, amplitude, pitch_bends)
 - MIDI file written to expected path
 - **Mock `basic_pitch.inference.predict`** in unit tests to avoid model download
 

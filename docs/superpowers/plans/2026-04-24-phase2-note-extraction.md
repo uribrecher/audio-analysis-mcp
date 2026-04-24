@@ -60,7 +60,7 @@ class NoteEvent(BaseModel):
     end_time: float
     pitch_midi: int
     amplitude: float
-    pitch_bend: float
+    pitch_bends: list[int] | None
 
 
 class NoteTranscribeResult(BaseModel):
@@ -244,7 +244,7 @@ def test_note_event_fields_populated(mock_predict: MagicMock, sine_440_wav: Path
     assert isinstance(note.end_time, float)
     assert isinstance(note.pitch_midi, int)
     assert isinstance(note.amplitude, float)
-    assert isinstance(note.pitch_bend, float)
+    assert note.pitch_bends is None  # mock returns None for pitch_bends
 
 
 @patch("audio_analysis_mcp.analysis.transcription.predict")
@@ -292,21 +292,13 @@ def transcribe_audio(
     # Convert to NoteEvent schema
     notes: list[NoteEvent] = []
     for start_s, end_s, pitch_midi, velocity, pitch_bends in note_events:
-        # pitch_bends is Optional[List[int]] — average to single float in semitones
-        bend_value = 0.0
-        if pitch_bends is not None and len(pitch_bends) > 0:
-            # Basic Pitch pitch_bends are in units of MIDI pitch bend (centered at 8192)
-            # Convert: (value - 8192) / 8192 * bend_range (default 2 semitones)
-            bend_value = float(
-                sum((b - 8192) / 8192 * 2.0 for b in pitch_bends) / len(pitch_bends)
-            )
         notes.append(
             NoteEvent(
                 start_time=float(start_s),
                 end_time=float(end_s),
                 pitch_midi=int(pitch_midi),
                 amplitude=float(velocity),
-                pitch_bend=bend_value,
+                pitch_bends=list(pitch_bends) if pitch_bends is not None else None,
             )
         )
     return str(midi_path), notes
@@ -353,7 +345,7 @@ from audio_analysis_mcp.schemas import NoteEvent
 def _note(start: float, end: float, pitch: int, amp: float = 0.8) -> NoteEvent:
     return NoteEvent(
         start_time=start, end_time=end,
-        pitch_midi=pitch, amplitude=amp, pitch_bend=0.0,
+        pitch_midi=pitch, amplitude=amp, pitch_bends=None,
     )
 
 
