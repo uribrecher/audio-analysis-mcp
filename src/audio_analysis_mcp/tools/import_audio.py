@@ -1,6 +1,6 @@
-import uuid
 from pathlib import Path
 from audio_analysis_mcp.server import mcp, get_workspace
+from audio_analysis_mcp.workspace import sanitize_job_name
 from audio_analysis_mcp.audio.normalize import normalize_audio
 from audio_analysis_mcp.schemas import ImportAudioResult
 
@@ -13,13 +13,15 @@ def import_audio(
 ) -> str:
     """Import a local audio file. Normalize to 44.1kHz 16-bit mono WAV."""
     ws = get_workspace()
-    stem = Path(file_path).stem
-    output_path = ws.imported / f"{stem}_{uuid.uuid4().hex[:8]}.wav"
+    job_name = sanitize_job_name(Path(file_path).name)
+    job_dir = ws.job_dir(job_name)
+    output_path = job_dir / "source.wav"
 
     dur, ch = normalize_audio(file_path, str(output_path), start_time, duration)
 
     return ImportAudioResult(
         audio_path=str(output_path),
+        job_name=job_name,
         sample_rate=44100,
         duration_seconds=dur,
         channels=ch,

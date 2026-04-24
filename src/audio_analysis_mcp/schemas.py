@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class ImportAudioResult(BaseModel):
     audio_path: str
+    job_name: str
     sample_rate: int
     duration_seconds: float
     channels: int
@@ -84,3 +85,50 @@ class AudioCompareResult(BaseModel):
     mel_spectrogram_distance: float
     clap_cosine_similarity: float | None
     band_diffs: list[BandDiff]
+
+
+class NoteEvent(BaseModel):
+    start_time: float
+    end_time: float
+    pitch_midi: int
+    amplitude: float
+    pitch_bends: list[int] | None
+
+
+class NoteTranscribeResult(BaseModel):
+    midi_path: str
+    notes_path: str
+    note_count: int
+
+
+class PolyphonyWindow(BaseModel):
+    start_time: float
+    end_time: float
+    note_count: int
+
+
+class CandidateNote(BaseModel):
+    note: NoteEvent
+    score: float
+    start_time: float
+    end_time: float
+    start_freq: float
+    end_freq: float
+
+
+class NoteTriageFileData(BaseModel):
+    """Full triage data written to the JSON file."""
+    polyphony_profile: list[PolyphonyWindow]
+    candidates: list[CandidateNote]
+
+
+class NoteTriageResult(BaseModel):
+    """Lightweight result returned by the MCP tool."""
+    triage_path: str
+    candidate_count: int
+    top_candidates: list[CandidateNote]
+
+
+class NoteIsolateResult(BaseModel):
+    audio_path: str
+    duration_seconds: float

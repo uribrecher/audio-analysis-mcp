@@ -1,6 +1,12 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 import librosa
 import scipy.signal
+
+# Shorthand for unparameterized numpy array type
+NDArray = npt.NDArray[Any]
 from audio_analysis_mcp.schemas import (
     SpectralFeatures,
     ADSREstimate,
@@ -9,21 +15,21 @@ from audio_analysis_mcp.schemas import (
 
 
 def compute_mel_spectrogram(
-    y: np.ndarray,
+    y: NDArray,
     sr: int,
     n_mels: int = 128,
     hop_length: int = 512,
     n_fft: int = 2048,
-) -> np.ndarray:
+) -> NDArray:
     """Compute log-power mel spectrogram. Returns (n_mels, time_frames) array."""
     mel = librosa.feature.melspectrogram(
         y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels,
     )
-    result: np.ndarray = librosa.power_to_db(mel, ref=np.max)
+    result: NDArray = librosa.power_to_db(mel, ref=np.max)
     return result
 
 
-def extract_spectral_features(y: np.ndarray, sr: int) -> SpectralFeatures:
+def extract_spectral_features(y: NDArray, sr: int) -> SpectralFeatures:
     """Extract fundamental frequency, harmonic ratios, and spectral shape."""
     rms_energy = float(np.sqrt(np.mean(y**2)))
     if rms_energy < 1e-6:
@@ -69,7 +75,7 @@ def extract_spectral_features(y: np.ndarray, sr: int) -> SpectralFeatures:
     )
 
 
-def estimate_adsr(y: np.ndarray, sr: int) -> ADSREstimate:
+def estimate_adsr(y: NDArray, sr: int) -> ADSREstimate:
     """Estimate ADSR envelope from amplitude envelope."""
     frame_length = max(int(0.01 * sr), 1)
     hop = frame_length // 2 or 1
@@ -129,7 +135,7 @@ def estimate_adsr(y: np.ndarray, sr: int) -> ADSREstimate:
     )
 
 
-def detect_modulation(y: np.ndarray, sr: int) -> ModulationDetection:
+def detect_modulation(y: NDArray, sr: int) -> ModulationDetection:
     """Detect vibrato, tremolo, and chorus. Simple heuristic approach."""
     rms_energy = float(np.sqrt(np.mean(y**2)))
     if rms_energy < 1e-6:

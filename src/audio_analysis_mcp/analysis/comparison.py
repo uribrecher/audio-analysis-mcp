@@ -1,5 +1,10 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 import librosa
+
+NDArray = npt.NDArray[Any]
 from audio_analysis_mcp.schemas import AudioCompareResult, BandDiff
 from audio_analysis_mcp.analysis.spectral import compute_mel_spectrogram
 
@@ -12,7 +17,7 @@ BANDS = {
 
 
 def _band_energy_db(
-    S: np.ndarray, freqs: np.ndarray, lo: float, hi: float
+    S: NDArray, freqs: NDArray, lo: float, hi: float
 ) -> float:
     mask = (freqs >= lo) & (freqs < hi)
     if not mask.any():

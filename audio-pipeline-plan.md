@@ -363,12 +363,24 @@ The algorithm applies a time-frequency mask (STFT → zero out bins outside the 
 ```
 ~/.audio-analysis-mcp/
   workspace/
-    imported/         # Imported/normalized audio
-    stems/            # Demucs output
-    spectrograms/     # Mel spectrogram .npy files
-    transcriptions/   # Basic Pitch MIDI + note event JSON
-    isolated_notes/   # Per-note WAV files from TF masking
-    rendered/         # Captured synth recordings
+    jobs/
+      <sanitized-song-name>/
+        source.wav                              # Imported/normalized audio
+        stems/
+          <preset>/                             # e.g. htdemucs_6s_accurate
+            bass.wav, drums.wav, vocals.wav, other.wav, ...
+        transcriptions/
+          <stem>_<preset>/                      # e.g. bass_medium
+            transcription.mid                   # MIDI for DAW
+            transcription.json                  # Note events for triage
+        triage/
+          <stem>_<preset>/
+            triage.json                         # Polyphony profile + candidates
+        isolated_notes/
+          <stem>_<preset>/
+            note_001_F1_94.3s.wav               # Human-readable filenames
+    spectrograms/          # Flat (used by spectrum_analyze)
+    rendered/              # Flat (used by audio_render)
 ```
 
 ## Agent Workflow (fallback — no trained models)
@@ -395,7 +407,7 @@ Once the research projects deliver trained models, the workflow extends with `en
 6. `spectrum_analyze`: mel spectrogram generation (librosa) + spectral features (harmonics, envelope, ADSR, modulation)
 7. `audio_compare`: mel spectrogram L2 distance + per-band diffs (CLAP deferred to Phase 2)
 
-### Phase 2: Note-Level Extraction
+### Phase 2: Note-Level Extraction ✅
 
 8. `analysis/transcription.py`: Basic Pitch integration → NoteTranscribeResult
 9. `note_transcribe` tool: wire transcription module to MCP
