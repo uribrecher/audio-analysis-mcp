@@ -126,7 +126,7 @@ class NoteTriageResult(BaseModel):
     """Lightweight result returned by the MCP tool."""
     triage_path: str
     candidate_count: int
-    top_candidate_summary: str
+    top_candidates: list[CandidateNote]
 
 
 class NoteIsolateResult(BaseModel):

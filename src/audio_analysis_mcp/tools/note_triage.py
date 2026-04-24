@@ -8,13 +8,6 @@ from audio_analysis_mcp.analysis.note_triage import triage_notes
 from audio_analysis_mcp.schemas import NoteEvent, NoteTriageResult
 
 
-NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-
-def _midi_to_name(midi: int) -> str:
-    return NOTE_NAMES[midi % 12] + str(midi // 12 - 1)
-
-
 @mcp.tool()
 def note_triage(
     audio_path: str,
@@ -48,15 +41,8 @@ def note_triage(
     triage_path = triage_dir / "triage.json"
     triage_path.write_text(file_data.model_dump_json(indent=2))
 
-    # Build summary
-    top_summary = "no candidates"
-    if file_data.candidates:
-        top = file_data.candidates[0]
-        name = _midi_to_name(top.note.pitch_midi)
-        top_summary = f"{name} at {top.start_time:.1f}s (score {top.score:.2f})"
-
     return NoteTriageResult(
         triage_path=str(triage_path),
         candidate_count=len(file_data.candidates),
-        top_candidate_summary=top_summary,
+        top_candidates=file_data.candidates[:5],
     ).model_dump_json(indent=2)
