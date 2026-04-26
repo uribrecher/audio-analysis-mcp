@@ -339,6 +339,7 @@ Create `src/audio_analysis_mcp/analysis/envelope.py`:
 ```python
 import librosa
 import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 
 _DEFAULT_FRAME_LENGTH_MS = 20.0
@@ -348,14 +349,14 @@ _DEFAULT_HOP_LENGTH_MS = 5.0
 class EnvelopeResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    envelope: np.ndarray            # 1-D, RMS values
-    envelope_sample_rate: float     # frames per second
-    hop_length: int                 # samples between frames
-    frame_length: int               # samples per RMS window
+    envelope: npt.NDArray[np.float32]   # 1-D, RMS values
+    envelope_sample_rate: float          # frames per second
+    hop_length: int                      # samples between frames
+    frame_length: int                    # samples per RMS window
 
 
 def extract_rms_envelope(
-    audio: np.ndarray,
+    audio: npt.NDArray[np.float32],
     sample_rate: int,
     frame_length_ms: float = _DEFAULT_FRAME_LENGTH_MS,
     hop_length_ms: float = _DEFAULT_HOP_LENGTH_MS,
@@ -496,12 +497,13 @@ Create `src/audio_analysis_mcp/analysis/adsr_fit.py`:
 
 ```python
 import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel
 
 _ATTACK_THRESHOLD = 0.05      # fraction of peak that defines "note start"
 _RELEASE_THRESHOLD = 0.05     # fraction of peak that defines "silence"
 _SUSTAIN_DROP_THRESHOLD = 0.10  # fraction of peak below which sustain ends
-_SUSTAIN_STDDEV_THRESHOLD = 0.05  # fraction of peak — flatness gate
+_SUSTAIN_STDDEV_THRESHOLD = 0.02  # fraction of peak — flatness gate (validated by scratch/explore_adsr_fit.py)
 _SUSTAIN_WINDOW_MS = 50.0
 _MIN_SUSTAIN_MS = 30.0
 _PLUCK_FALLBACK_FRACTION = 0.5  # for sustain-less notes, sustain marker = drop below 50% peak
@@ -521,7 +523,7 @@ def _frame_to_ms(n_frames: int, envelope_sample_rate: float) -> float:
 
 
 def fit_adsr(
-    envelope: np.ndarray,
+    envelope: npt.NDArray[np.float32],
     envelope_sample_rate: float,
     peak_velocity: float,
 ) -> ADSRFit:
@@ -695,17 +697,18 @@ Create `src/audio_analysis_mcp/analysis/sustain_isolation.py`:
 
 ```python
 import numpy as np
+import numpy.typing as npt
 
 _MIN_SUSTAIN_MS = 100.0
 
 
 def isolate_sustain(
-    audio: np.ndarray,
+    audio: npt.NDArray[np.float32],
     sample_rate: int,
     sustain_start_idx: int,
     sustain_end_idx: int,
     envelope_hop_length: int,
-) -> np.ndarray | None:
+) -> npt.NDArray[np.float32] | None:
     """Trim audio to the sustained region identified by ADSR fitting.
 
     Returns None if the sustain region is shorter than 100 ms (caller falls back
@@ -854,6 +857,7 @@ Create `src/audio_analysis_mcp/analysis/amplitude.py`:
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import soundfile as sf
 
 from audio_analysis_mcp.analysis.adsr_triage import classify_adsr_triage
@@ -869,7 +873,7 @@ from audio_analysis_mcp.schemas import (
 
 
 def analyze_amplitude(
-    audio: np.ndarray,
+    audio: npt.NDArray[np.float32],
     sample_rate: int,
     notes: list[NoteEvent],
     output_dir: Path,
