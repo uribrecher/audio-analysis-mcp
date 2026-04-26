@@ -15,6 +15,7 @@ A Python MCP server providing audio analysis tools for AI-driven sound recreatio
 | `note_transcribe` | Polyphonic transcription via Basic Pitch — outputs MIDI + note events JSON |
 | `note_triage` | Analyze transcription, select best candidate notes for isolation |
 | `note_isolate` | Isolate a note from audio within a time-frequency box via STFT masking |
+| `amplitude_analyze` | Per-cluster ADSR analysis with cross-candidate consistency check (**not ready for production** — see `docs/TODO.md`) |
 
 ## Setup
 
@@ -59,6 +60,19 @@ MCP client configuration:
 uv run pytest -v       # Run tests
 uv run mypy src/       # Type check
 ```
+
+## Scratch tools
+
+The `scratch/` directory holds ad-hoc Python scripts used during research and
+debugging — not part of the MCP server. They explore algorithms (clustering,
+ADSR fitting, envelope shapes, overlap detection), inspect intermediate
+outputs from real songs (e.g. Van Halen "Jump" triage clusters), and generate
+the plots referenced from `docs/TODO.md` and `docs/research/`.
+
+These scripts are intentionally untested and may bit-rot as the underlying
+analysis modules evolve. Treat them as a notebook: useful starting points for
+reproducing past experiments or scaffolding new ones, not as a stable API.
+Run them directly with `uv run python scratch/<script>.py`.
 
 ## License
 

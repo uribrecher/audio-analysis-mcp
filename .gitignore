@@ -7,3 +7,4 @@ dist/
 .pytest_cache/
 test_data/
 .claude/
+.DS_Store
