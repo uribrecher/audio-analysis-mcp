@@ -25,7 +25,10 @@ JOB = Path(
 )
 TRIAGE = JOB / "triage/other_fast/triage.json"
 STEM = JOB / "stems/fast/other.wav"
-OUT_PNG = Path("/tmp/van-halen-amplitude-envelopes.png")
+OUT_PNG = Path(
+    "/Users/uribrecher/test/sounds-and-recreation/audio-analysis-mcp/"
+    "docs/research/amplitude-fit-issues-van-halen-jump.png"
+)
 
 
 def main() -> None:

@@ -14,6 +14,8 @@
 
 Manual testing on Van Halen "Jump" synth chords (clusters 00, 01, 03 in the [0,30]s window) showed the heuristic ADSR fitter is meaningfully off in every component. Plotted envelopes are at `scratch/plot_amplitude_envelopes.py` and `extract_cluster_audio.py` reproduces the audio slices used.
 
+Visual reference: `docs/research/amplitude-fit-issues-van-halen-jump.png` (regenerate via `scratch/plot_amplitude_envelopes.py`).
+
 Concrete issues observed:
 
 - [ ] **Attack-end is taken at RMS peak, but should be at the RMS slope inflection (2nd-derivative crossing).** On synth tones with flat-ish plateaus, peak-based attack is wildly inflated. Cluster 01 ("5-note C @ 8.9s"): recovered attack=205ms, audio's actual attack ends at ~40ms.
