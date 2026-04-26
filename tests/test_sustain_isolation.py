@@ -7,7 +7,7 @@ SR = 22050
 
 
 def test_isolates_sustain_region():
-    # 1-second signal; sustain region is envelope frames 200..600 with hop=5ms → audio samples 22050*1.0..22050*3.0
+    # 4-second signal; sustain region is envelope frames 200..600 with hop=5ms → audio samples 22050*1.0..22050*3.0
     audio = np.ones(SR * 4, dtype=np.float32)
     hop_length = int(0.005 * SR)
     sustain = isolate_sustain(

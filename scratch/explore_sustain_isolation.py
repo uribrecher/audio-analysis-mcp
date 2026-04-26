@@ -49,7 +49,7 @@ def main():
     audio = (env * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
 
     env_result = extract_rms_envelope(audio, sample_rate=SR)
-    fit = fit_adsr(env_result.envelope, env_result.envelope_sample_rate, peak_velocity=1.0)
+    fit = fit_adsr(env_result.envelope, env_result.envelope_sample_rate)
 
     print(f"audio:           {audio.size} samples ({audio.size / SR:.3f}s)")
     print(f"envelope:        {env_result.envelope.size} frames; hop_length={env_result.hop_length} samples ({env_result.hop_length * 1000.0 / SR:.1f}ms)")

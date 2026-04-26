@@ -89,9 +89,13 @@ def _build_candidate_note(note: NoteEvent) -> CandidateNote:
     start_freq, end_freq = _freq_bounds(note.pitch_midi)
     padded_start = max(0.0, note.start_time - TIME_PADDING)
     padded_end = note.end_time + TIME_PADDING
+    # Per-note score is the note's velocity — a stable proxy for "how
+    # significant is this note in isolation" that's preserved through
+    # serialization. Cluster-level scoring (in _score_cluster) is what
+    # actually drives candidate ranking; member scores are informational.
     return CandidateNote(
         note=note,
-        score=0.0,                       # filled in by Task 4
+        score=float(note.amplitude),
         start_time=padded_start,
         end_time=padded_end,
         start_freq=round(start_freq, 2),
@@ -240,16 +244,20 @@ def triage_notes(
     scored = [(c, s) for c, s in scored if c.kind != "arpeggio"]
     scored.sort(key=lambda x: x[1], reverse=True)
 
+    # Pitch-diversity penalty: penalize a cluster if ANY of its member pitches
+    # is within 2 semitones of ANY pitch in an already-selected cluster. This
+    # treats chords (multiple member pitches) symmetrically with singles, and
+    # doesn't depend on the (currently arbitrary) ordering of cluster members.
     selected: list[tuple[CandidateCluster, float]] = []
-    selected_pitches: list[int] = []
+    selected_pitches: set[int] = set()
     for cluster, score in scored:
         if len(selected) >= max_candidates:
             break
-        rep_pitch = cluster.members[0].note.pitch_midi  # highest-scoring member by sort order
-        if any(abs(rep_pitch - p) <= 2 for p in selected_pitches):
+        member_pitches = {m.note.pitch_midi for m in cluster.members}
+        if any(abs(mp - sp) <= 2 for mp in member_pitches for sp in selected_pitches):
             score *= 0.5
         selected.append((cluster, score))
-        selected_pitches.append(rep_pitch)
+        selected_pitches.update(member_pitches)
 
     selected.sort(key=lambda x: x[1], reverse=True)
     selected = selected[:max_candidates]
