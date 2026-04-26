@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -116,17 +118,30 @@ class CandidateNote(BaseModel):
     end_freq: float
 
 
+ClusterKind = Literal["single", "chord", "arpeggio"]
+
+
+class CandidateCluster(BaseModel):
+    kind: ClusterKind
+    score: float
+    start_time: float
+    end_time: float
+    start_freq: float
+    end_freq: float
+    members: list[CandidateNote]
+
+
 class NoteTriageFileData(BaseModel):
     """Full triage data written to the JSON file."""
     polyphony_profile: list[PolyphonyWindow]
-    candidates: list[CandidateNote]
+    candidates: list[CandidateCluster]
 
 
 class NoteTriageResult(BaseModel):
     """Lightweight result returned by the MCP tool."""
     triage_path: str
     candidate_count: int
-    top_candidates: list[CandidateNote]
+    top_candidates: list[CandidateCluster]
 
 
 class NoteIsolateResult(BaseModel):
