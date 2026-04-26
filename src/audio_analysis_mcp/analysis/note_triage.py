@@ -87,6 +87,48 @@ _CHORD_TOLERANCE_S = 0.030
 _ARPEGGIO_GAP_S = 0.150
 _ARPEGGIO_MIN_SIZE = 3
 
+_KIND_BONUS = {"single": 3.0, "chord": 2.0, "arpeggio": 0.0}
+
+
+def _cluster_polyphony(cluster: CandidateCluster, profile: list[PolyphonyWindow]) -> float:
+    """Average polyphony count across windows that overlap with the cluster's time range."""
+    overlapping = [
+        w for w in profile if w.start_time < cluster.end_time and w.end_time > cluster.start_time
+    ]
+    if not overlapping:
+        return 1.0
+    return sum(w.note_count for w in overlapping) / len(overlapping)
+
+
+def _cluster_temporal_gap(cluster: CandidateCluster, all_clusters: list[CandidateCluster]) -> float:
+    """Minimum time gap to the nearest neighboring cluster (seconds)."""
+    min_gap = float("inf")
+    for other in all_clusters:
+        if other is cluster:
+            continue
+        gap = max(0.0, max(other.start_time - cluster.end_time, cluster.start_time - other.end_time))
+        min_gap = min(min_gap, gap)
+    return min_gap if min_gap != float("inf") else 1.0
+
+
+def _score_cluster(
+    cluster: CandidateCluster,
+    profile: list[PolyphonyWindow],
+    all_clusters: list[CandidateCluster],
+) -> float:
+    """Score a cluster for ADSR-analysis suitability. Higher = better."""
+    duration = cluster.end_time - cluster.start_time
+    poly = _cluster_polyphony(cluster, profile)
+    gap = _cluster_temporal_gap(cluster, all_clusters)
+    velocity = sum(m.note.amplitude for m in cluster.members) / max(len(cluster.members), 1)
+
+    poly_score = 1.0 / max(poly, 1.0)
+    dur_score = float(np.log1p(min(duration, 2.0)))
+    gap_score = float(np.log1p(gap))
+    kind_bonus = _KIND_BONUS[cluster.kind]
+
+    return kind_bonus + poly_score * 2.0 + dur_score + gap_score * 0.5 + velocity * 1.0
+
 
 def _build_candidate_note(note: NoteEvent) -> CandidateNote:
     start_freq, end_freq = _freq_bounds(note.pitch_midi)

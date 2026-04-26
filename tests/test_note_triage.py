@@ -152,3 +152,62 @@ def test_cluster_arpeggio_breaks_on_long_gap():
     clusters = _cluster_notes(notes)
     assert all(c.kind == "single" for c in clusters)
     assert len(clusters) == 4
+
+
+from audio_analysis_mcp.analysis.note_triage import _score_cluster, _build_polyphony_profile
+from audio_analysis_mcp.schemas import CandidateNote, CandidateCluster
+
+
+def _build_candidate_note_for_test(start: float, end: float, pitch: int, amp: float = 0.8) -> CandidateNote:
+    return CandidateNote(
+        note=NoteEvent(start_time=start, end_time=end, pitch_midi=pitch, amplitude=amp, pitch_bends=None),
+        score=0.0, start_time=start, end_time=end, start_freq=200.0, end_freq=2000.0,
+    )
+
+
+def test_score_single_outscores_chord_outscores_arpeggio():
+    # Three identical-shape clusters differing only in kind.
+    clusters = []
+    for kind in ("single", "chord", "arpeggio"):
+        members = [_build_candidate_note_for_test(0.0, 1.0, 60)]
+        clusters.append(CandidateCluster(
+            kind=kind, score=0.0,
+            start_time=0.0, end_time=1.0, start_freq=200.0, end_freq=2000.0,
+            members=members,
+        ))
+    profile = _build_polyphony_profile([_ev(0.0, 1.0)])
+    s_single = _score_cluster(clusters[0], profile, clusters)
+    s_chord = _score_cluster(clusters[1], profile, clusters)
+    s_arp = _score_cluster(clusters[2], profile, clusters)
+    assert s_single > s_chord > s_arp
+
+
+def test_score_velocity_helps():
+    soft = CandidateCluster(
+        kind="single", score=0.0, start_time=0.0, end_time=1.0,
+        start_freq=200.0, end_freq=2000.0,
+        members=[_build_candidate_note_for_test(0.0, 1.0, 60, amp=0.1)],
+    )
+    loud = CandidateCluster(
+        kind="single", score=0.0, start_time=2.0, end_time=3.0,
+        start_freq=200.0, end_freq=2000.0,
+        members=[_build_candidate_note_for_test(2.0, 3.0, 60, amp=0.9)],
+    )
+    profile = _build_polyphony_profile([_ev(0.0, 1.0), _ev(2.0, 3.0)])
+    assert _score_cluster(loud, profile, [soft, loud]) > _score_cluster(soft, profile, [soft, loud])
+
+
+def test_score_longer_duration_helps():
+    short = CandidateCluster(
+        kind="single", score=0.0, start_time=0.0, end_time=0.6,
+        start_freq=200.0, end_freq=2000.0,
+        members=[_build_candidate_note_for_test(0.0, 0.6, 60)],
+    )
+    long_c = CandidateCluster(
+        kind="single", score=0.0, start_time=2.0, end_time=4.0,
+        start_freq=200.0, end_freq=2000.0,
+        members=[_build_candidate_note_for_test(2.0, 4.0, 60)],
+    )
+    profile = _build_polyphony_profile([_ev(0.0, 0.6), _ev(2.0, 4.0)])
+    assert _score_cluster(long_c, profile, [short, long_c]) > _score_cluster(short, profile, [short, long_c])
+
