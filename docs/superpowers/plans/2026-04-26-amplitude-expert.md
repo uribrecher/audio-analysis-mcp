@@ -304,9 +304,9 @@ def test_envelope_result_shape():
     assert isinstance(result, EnvelopeResult)
     assert result.envelope.ndim == 1
     assert result.envelope_sample_rate > 0
-    expected_len = audio.size // result.hop_length
-    # Allow ±1 frame for edge handling
-    assert abs(result.envelope.size - expected_len) <= 1
+    # librosa.feature.rms with center=False produces this exact frame count
+    expected_len = (audio.size - result.frame_length) // result.hop_length + 1
+    assert result.envelope.size == expected_len
 
 
 def test_envelope_tracks_amplitude_shape():
