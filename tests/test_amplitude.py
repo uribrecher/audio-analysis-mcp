@@ -118,7 +118,4 @@ def test_orchestrator_recovers_known_adsr(tmp_path: Path):
     )
     assert result.adsr is not None
     assert abs(result.adsr.attack_ms - 20.0) < 15.0
-    # RMS envelope of a sine wave at amplitude A gives A/sqrt(2), so sustain_level
-    # as measured from the RMS envelope is ~0.424 for a signal with peak envelope 0.6.
-    # Tolerance widened to 0.20 to account for RMS vs peak-amplitude scaling.
-    assert abs(result.adsr.sustain_level - 0.6) < 0.20
+    assert abs(result.adsr.sustain_level - 0.6) < 0.10

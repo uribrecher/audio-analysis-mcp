@@ -38,11 +38,9 @@ def analyze_amplitude(
             sustain_slice_path=None,
         )
 
-    peak_velocity = max((n.amplitude for n in notes), default=1.0)
     fit = fit_adsr(
         env_result.envelope,
         envelope_sample_rate=env_result.envelope_sample_rate,
-        peak_velocity=peak_velocity,
     )
     adsr = ADSREstimate(
         attack_ms=fit.attack_ms,

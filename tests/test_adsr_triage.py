@@ -34,3 +34,8 @@ def test_dense_arpeggio_is_rejected():
 def test_sequential_two_notes_is_monophonic():
     notes = [_note(0.0, 0.5), _note(0.6, 1.1)]
     assert classify_adsr_triage(notes) == AmplitudeTriage.MONOPHONIC
+
+
+def test_low_velocity_rejected():
+    notes = [_note(0.0, 1.0, amp=0.05)]
+    assert classify_adsr_triage(notes) == AmplitudeTriage.REJECTED

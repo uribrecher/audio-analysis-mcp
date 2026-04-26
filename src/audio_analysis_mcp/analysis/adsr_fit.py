@@ -14,7 +14,7 @@ _PLUCK_FALLBACK_FRACTION = 0.5  # for sustain-less notes, sustain marker = drop 
 class ADSRFit(BaseModel):
     attack_ms: float
     decay_ms: float
-    sustain_level: float           # 0..1, normalized by peak_velocity
+    sustain_level: float           # 0..1, ratio of sustain RMS to envelope peak (naturally velocity-invariant)
     release_ms: float
     sustain_start_idx: int         # index into envelope
     sustain_end_idx: int           # index into envelope (exclusive)
@@ -27,12 +27,9 @@ def _frame_to_ms(n_frames: int, envelope_sample_rate: float) -> float:
 def fit_adsr(
     envelope: npt.NDArray[np.float32],
     envelope_sample_rate: float,
-    peak_velocity: float,
 ) -> ADSRFit:
     if envelope.ndim != 1 or envelope.size == 0:
         raise ValueError("envelope must be a non-empty 1-D array")
-    if peak_velocity <= 0:
-        raise ValueError("peak_velocity must be > 0")
 
     peak = float(envelope.max())
     if peak <= 0:
@@ -93,7 +90,7 @@ def fit_adsr(
         )
 
     sustain_level_raw = float(envelope[sustain_start_idx:sustain_end_idx].mean())
-    sustain_level = float(np.clip(sustain_level_raw / peak_velocity, 0.0, 1.0))
+    sustain_level = float(np.clip(sustain_level_raw / peak, 0.0, 1.0))
     decay_ms = _frame_to_ms(sustain_start_idx - peak_idx, envelope_sample_rate)
 
     # Release: from sustain_end_idx until envelope < _RELEASE_THRESHOLD * peak

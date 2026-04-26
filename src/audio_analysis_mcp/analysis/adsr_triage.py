@@ -2,10 +2,13 @@ from audio_analysis_mcp.schemas import AmplitudeTriage, NoteEvent
 
 _BLOCK_CHORD_TOLERANCE_S = 0.030
 _ARPEGGIO_ONSETS_PER_SECOND = 3.0
+_MIN_VELOCITY = 0.1  # below this, signal-to-noise ratio is too poor for reliable ADSR fitting
 
 
 def classify_adsr_triage(notes: list[NoteEvent]) -> AmplitudeTriage:
     if not notes:
+        return AmplitudeTriage.REJECTED
+    if max((n.amplitude for n in notes), default=0.0) < _MIN_VELOCITY:
         return AmplitudeTriage.REJECTED
     if len(notes) == 1:
         return AmplitudeTriage.MONOPHONIC
