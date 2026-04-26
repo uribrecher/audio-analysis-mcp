@@ -111,3 +111,6 @@ class Workspace:
 
     def job_isolated_notes_dir(self, job_name: str, stem: str, preset: str) -> Path:
         return self._ensure(f"jobs/{job_name}/isolated_notes/{stem}_{preset}")
+
+    def job_amplitude_dir(self, job_name: str, stem: str, preset: str) -> Path:
+        return self._ensure(f"jobs/{job_name}/amplitude/{stem}_{preset}")

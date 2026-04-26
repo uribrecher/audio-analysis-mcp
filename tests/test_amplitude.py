@@ -186,3 +186,11 @@ def test_orchestrator_writes_per_cluster_outputs(tmp_path: Path):
         assert "cluster_00" in c.sustain_slice_path
         assert Path(c.sustain_slice_path).exists()
 
+
+def test_workspace_job_amplitude_dir(tmp_path: Path):
+    from audio_analysis_mcp.workspace import Workspace
+    ws = Workspace(root=tmp_path)
+    d = ws.job_amplitude_dir("myjob", stem="other", preset="htdemucs")
+    assert d.exists()
+    assert d.relative_to(tmp_path) == Path("jobs/myjob/amplitude/other_htdemucs")
+

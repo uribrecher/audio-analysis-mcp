@@ -20,6 +20,7 @@ import audio_analysis_mcp.tools.audio_compare  # noqa: F401
 import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
 import audio_analysis_mcp.tools.note_triage  # noqa: F401
 import audio_analysis_mcp.tools.note_isolate  # noqa: F401
+import audio_analysis_mcp.tools.amplitude_analyze  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -178,3 +179,33 @@ def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
     assert result["duration_seconds"] > 0
     assert "note_001_A4_0.0s.wav" in result["audio_path"]
     assert "test-song/isolated_notes/bass_fast" in result["audio_path"]
+
+
+def test_amplitude_analyze_e2e(sine_440_wav: Path, tmp_path: Path):
+    """End-to-end: triage → amplitude_analyze produces per-cluster outputs."""
+    from audio_analysis_mcp.tools.amplitude_analyze import amplitude_analyze
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.05, end_time=0.95, pitch_midi=69, amplitude=0.8, pitch_bends=None),
+    ]
+    notes_path = stem_dir.parent.parent.parent / "notes.json"
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    triage_json = json.loads(note_triage(audio_path=str(stem_file), notes_path=str(notes_path), min_duration=0.0))
+    triage_path = triage_json["triage_path"]
+
+    result_json = amplitude_analyze(audio_path=str(stem_file), triage_path=triage_path)
+    payload = json.loads(result_json)
+    # Single 1-second sine note → triage produces ≥1 cluster → orchestrator analyzes it.
+    # The sine wave has no real ADSR shape, so sustain may or may not be present; either way
+    # the tool must return a valid result structure.
+    assert "candidates" in payload
+    assert "is_consistent" in payload
+    assert "divergence_score" in payload
