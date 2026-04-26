@@ -1,7 +1,18 @@
+import json
+from pathlib import Path
+
+import numpy as np
+import soundfile as sf
+
+from audio_analysis_mcp.analysis.amplitude import analyze_amplitude
 from audio_analysis_mcp.schemas import (
     ADSREstimate,
     AmplitudeCandidate,
     AmplitudeAnalyzeResult,
+    CandidateCluster,
+    CandidateNote,
+    NoteEvent,
+    NoteTriageFileData,
 )
 
 
@@ -55,3 +66,123 @@ def test_amplitude_analyze_result_rejected():
     assert result.candidates == []
     assert result.consensus_adsr is None
     assert result.rejected_reason == "no candidates with usable sustain"
+
+
+SR = 22050
+
+
+def _adsr_audio(duration_s: float, sustain: float = 0.6, freq: float = 220.0) -> np.ndarray:
+    n_a = int(0.02 * SR)
+    n_d = int(0.10 * SR)
+    n_s = max(0, int(SR * duration_s) - n_a - n_d - int(0.15 * SR))
+    n_r = int(0.15 * SR)
+    env = np.concatenate([
+        np.linspace(0.0, 1.0, n_a, endpoint=False),
+        np.linspace(1.0, sustain, n_d, endpoint=False),
+        np.full(n_s, sustain),
+        np.linspace(sustain, 0.0, n_r, endpoint=True),
+    ])
+    t = np.arange(env.size) / SR
+    return (env * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+
+def _cluster_at(start_s: float, end_s: float, pitch: int) -> CandidateCluster:
+    return CandidateCluster(
+        kind="single", score=2.5,
+        start_time=start_s, end_time=end_s,
+        start_freq=200.0, end_freq=2000.0,
+        members=[CandidateNote(
+            note=NoteEvent(start_time=start_s, end_time=end_s, pitch_midi=pitch,
+                           amplitude=0.8, pitch_bends=None),
+            score=2.5, start_time=start_s, end_time=end_s,
+            start_freq=200.0, end_freq=2000.0,
+        )],
+    )
+
+
+def _write_triage(tmp_path: Path, clusters: list[CandidateCluster]) -> Path:
+    data = NoteTriageFileData(polyphony_profile=[], candidates=clusters)
+    path = tmp_path / "triage.json"
+    path.write_text(data.model_dump_json(indent=2))
+    return path
+
+
+def test_orchestrator_two_consistent_clusters_emits_consensus(tmp_path: Path):
+    # Two near-identical synthetic notes back-to-back → one combined audio buffer.
+    note_a = _adsr_audio(duration_s=0.77)
+    silence = np.zeros(int(0.5 * SR), dtype=np.float32)
+    note_b = _adsr_audio(duration_s=0.77)
+    audio = np.concatenate([note_a, silence, note_b])
+
+    end_a = note_a.size / SR
+    start_b = (note_a.size + silence.size) / SR
+    end_b = audio.size / SR
+
+    clusters = [
+        _cluster_at(0.0, end_a, 60),
+        _cluster_at(start_b, end_b, 64),
+    ]
+    triage_path = _write_triage(tmp_path, clusters)
+
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    assert result.rejected_reason is None
+    assert len(result.candidates) == 2
+    assert result.is_consistent
+    assert result.consensus_adsr is not None
+    # Each candidate has its own envelope.npy on disk
+    for c in result.candidates:
+        assert Path(c.envelope_curve_path).exists()
+
+
+def test_orchestrator_rejects_when_all_plucks(tmp_path: Path):
+    # A single very short note → ADSR fit returns sustain_level=0 (pluck fallback) → skipped.
+    n_a = int(0.02 * SR)
+    n_d = int(0.05 * SR)
+    short = np.concatenate([
+        np.linspace(0.0, 1.0, n_a, endpoint=False),
+        np.linspace(1.0, 0.0, n_d, endpoint=True),
+    ])
+    t = np.arange(short.size) / SR
+    audio = (short * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
+
+    clusters = [_cluster_at(0.0, audio.size / SR, 60)]
+    triage_path = _write_triage(tmp_path, clusters)
+
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    assert result.rejected_reason == "no candidates with usable sustain"
+    assert result.candidates == []
+    assert result.consensus_adsr is None
+
+
+def test_orchestrator_no_clusters_returns_rejected(tmp_path: Path):
+    audio = _adsr_audio(0.77)
+    triage_path = _write_triage(tmp_path, [])
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    assert result.rejected_reason == "no candidates with usable sustain"
+    assert result.candidates == []
+
+
+def test_orchestrator_writes_per_cluster_outputs(tmp_path: Path):
+    audio = _adsr_audio(0.77)
+    clusters = [_cluster_at(0.0, audio.size / SR, 60)]
+    triage_path = _write_triage(tmp_path, clusters)
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    assert len(result.candidates) == 1
+    c = result.candidates[0]
+    assert "cluster_00" in c.envelope_curve_path
+    if c.sustain_slice_path:
+        assert "cluster_00" in c.sustain_slice_path
+        assert Path(c.sustain_slice_path).exists()
+
