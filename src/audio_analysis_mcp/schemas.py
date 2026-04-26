@@ -147,3 +147,20 @@ class NoteTriageResult(BaseModel):
 class NoteIsolateResult(BaseModel):
     audio_path: str
     duration_seconds: float
+
+
+class AmplitudeCandidate(BaseModel):
+    cluster_index: int                       # index into the triage's candidates list
+    kind: Literal["single", "chord"]         # arpeggios are filtered upstream by triage
+    score: float                              # cluster's triage score (preserved for traceability)
+    adsr: ADSREstimate
+    envelope_curve_path: str
+    sustain_slice_path: str | None
+
+
+class AmplitudeAnalyzeResult(BaseModel):
+    candidates: list[AmplitudeCandidate]
+    consensus_adsr: ADSREstimate | None
+    divergence_score: float
+    is_consistent: bool
+    rejected_reason: str | None
