@@ -1,5 +1,3 @@
-from enum import Enum
-
 from pydantic import BaseModel
 
 
@@ -134,17 +132,3 @@ class NoteTriageResult(BaseModel):
 class NoteIsolateResult(BaseModel):
     audio_path: str
     duration_seconds: float
-
-
-class AmplitudeTriage(str, Enum):
-    MONOPHONIC = "monophonic"
-    BLOCK_CHORD = "block_chord"
-    ARPEGGIO = "arpeggio"
-    REJECTED = "rejected"
-
-
-class AmplitudeAnalyzeResult(BaseModel):
-    adsr_triage: AmplitudeTriage
-    adsr: ADSREstimate | None
-    envelope_curve_path: str
-    sustain_slice_path: str | None
