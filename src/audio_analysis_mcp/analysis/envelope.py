@@ -1,5 +1,6 @@
 import librosa
 import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 
 _DEFAULT_FRAME_LENGTH_MS = 20.0
@@ -9,14 +10,14 @@ _DEFAULT_HOP_LENGTH_MS = 5.0
 class EnvelopeResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    envelope: np.ndarray[tuple[int], np.dtype[np.float32]]            # 1-D, RMS values
+    envelope: npt.NDArray[np.float32]            # 1-D, RMS values
     envelope_sample_rate: float     # frames per second
     hop_length: int                 # samples between frames
     frame_length: int               # samples per RMS window
 
 
 def extract_rms_envelope(
-    audio: np.ndarray[tuple[int], np.dtype[np.float32]],
+    audio: npt.NDArray[np.float32],
     sample_rate: int,
     frame_length_ms: float = _DEFAULT_FRAME_LENGTH_MS,
     hop_length_ms: float = _DEFAULT_HOP_LENGTH_MS,
