@@ -484,6 +484,44 @@ def test_fit_pluck_with_no_sustain():
     fit = fit_adsr(env, envelope_sample_rate=200.0, peak_velocity=1.0)
     assert fit.sustain_level < 0.1
     assert fit.sustain_start_idx == fit.sustain_end_idx
+
+
+def test_fit_handles_exponential_decay():
+    # Real synth decays are exponential, not linear. Validate the fitter still recovers ADSR.
+    env_sr = 200.0
+    n_a, n_d, n_s, n_r = 4, 20, 100, 30
+    sus = 0.6
+    tau = 0.05  # 50ms time constant
+    t_decay = np.arange(n_d) / env_sr
+    decay_curve = sus + (1.0 - sus) * np.exp(-t_decay / tau)
+    env = np.concatenate([
+        np.linspace(0.0, 1.0, n_a, endpoint=False),
+        decay_curve,
+        np.full(n_s, sus),
+        np.linspace(sus, 0.0, n_r, endpoint=True),
+    ]).astype(np.float32)
+    fit = fit_adsr(env, envelope_sample_rate=env_sr, peak_velocity=1.0)
+    assert abs(fit.attack_ms - 20.0) < 10.0
+    assert abs(fit.decay_ms - 100.0) < 25.0
+    assert abs(fit.sustain_level - 0.6) < 0.05
+    assert abs(fit.release_ms - 150.0) < 25.0
+
+
+def test_fit_sustain_runs_to_envelope_end():
+    # Sustain runs to the end of the envelope (no release segment).
+    # Exercises the for-else fallback. Exclusive end semantics → sustain_end_idx == envelope.size.
+    env = np.concatenate([
+        np.linspace(0.0, 1.0, 4, endpoint=False),
+        np.linspace(1.0, 0.6, 20, endpoint=False),
+        np.full(120, 0.6),
+    ]).astype(np.float32)
+    fit = fit_adsr(env, envelope_sample_rate=200.0, peak_velocity=1.0)
+    assert fit.sustain_end_idx == env.size
+    # No release segment → release_ms should be 0
+    assert fit.release_ms == 0.0
+    # Sustain length should reflect the full plateau (allow attack+decay slack)
+    sustain_frames = fit.sustain_end_idx - fit.sustain_start_idx
+    assert sustain_frames >= 100  # at least 500ms of the 600ms plateau
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -568,20 +606,27 @@ def fit_adsr(
                 sustain_end_idx = i
                 break
         else:
-            sustain_end_idx = envelope.size - window_frames
+            # Sustain runs to the end of the envelope. Exclusive end = envelope.size.
+            sustain_end_idx = envelope.size
 
     sustain_duration_ms = _frame_to_ms(sustain_end_idx - sustain_start_idx, envelope_sample_rate)
 
     if not found_start or sustain_duration_ms < _MIN_SUSTAIN_MS:
-        # Pluck fallback: locate where envelope drops below 50% of peak after the peak
+        # Pluck fallback: locate where envelope drops below 50% of peak after the peak.
+        # Early return for readability — none of the sustain-region math applies here.
         below = np.where(envelope[peak_idx:] < _PLUCK_FALLBACK_FRACTION * peak)[0]
         marker = peak_idx + int(below[0]) if below.size > 0 else envelope.size - 1
-        sustain_start_idx = marker
-        sustain_end_idx = marker
-        sustain_level_raw = 0.0
-    else:
-        sustain_level_raw = float(envelope[sustain_start_idx:sustain_end_idx].mean())
+        decay_ms = _frame_to_ms(marker - peak_idx, envelope_sample_rate)
+        return ADSRFit(
+            attack_ms=attack_ms,
+            decay_ms=decay_ms,
+            sustain_level=0.0,
+            release_ms=0.0,
+            sustain_start_idx=marker,
+            sustain_end_idx=marker,
+        )
 
+    sustain_level_raw = float(envelope[sustain_start_idx:sustain_end_idx].mean())
     sustain_level = float(np.clip(sustain_level_raw / peak_velocity, 0.0, 1.0))
     decay_ms = _frame_to_ms(sustain_start_idx - peak_idx, envelope_sample_rate)
 
@@ -1177,7 +1222,7 @@ def test_signalflow_rendered_adsr_recovered(tmp_path: Path):
     assert result.sustain_slice_path is not None
 ```
 
-(If SignalFlow's API names differ in the installed version — `ASREnvelope` vs `ASR` vs `Envelope` — update the import and constructor to match. Run `uv run python -c "import signalflow; print(dir(signalflow))"` to confirm.)
+(If SignalFlow's API names differ in the installed version — `ASREnvelope` vs `ASR` vs `Envelope` — update the import and constructor to match. To confirm available names, write a small script at `scratch/explore_signalflow.py` that imports `signalflow` and prints `dir(signalflow)`, then run it via `uv run python scratch/explore_signalflow.py`.)
 
 - [ ] **Step 3: Run the slow test explicitly**
 
