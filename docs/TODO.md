@@ -14,7 +14,7 @@
 
 Manual testing on Van Halen "Jump" synth chords (clusters 00, 01, 03 in the [0,30]s window) showed the heuristic ADSR fitter is meaningfully off in every component. Plotted envelopes are at `scratch/plot_amplitude_envelopes.py` and `extract_cluster_audio.py` reproduces the audio slices used.
 
-Visual reference: `docs/research/amplitude-fit-issues-van-halen-jump.png` (regenerate via `scratch/plot_amplitude_envelopes.py`).
+Visual reference: ![amplitude fit issues — Van Halen "Jump"](research/amplitude-fit-issues-van-halen-jump.png) (regenerate via `scratch/plot_amplitude_envelopes.py`).
 
 Concrete issues observed:
 
