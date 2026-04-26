@@ -42,10 +42,6 @@ def _freq_bounds(pitch_midi: int) -> tuple[float, float]:
     return lower, upper
 
 
-_CHORD_TOLERANCE_S = 0.030
-_ARPEGGIO_GAP_S = 0.150
-_ARPEGGIO_MIN_SIZE = 3
-
 _KIND_BONUS = {"single": 3.0, "chord": 2.0, "arpeggio": 0.0}
 
 
@@ -103,72 +99,75 @@ def _build_candidate_note(note: NoteEvent) -> CandidateNote:
     )
 
 
+def _intervals_overlap(a: NoteEvent, b: NoteEvent) -> bool:
+    """True iff a and b are sounding simultaneously at some moment."""
+    return a.start_time < b.end_time and a.end_time > b.start_time
+
+
+def _connected_components(notes: list[NoteEvent]) -> list[list[int]]:
+    """Group note indices into connected components of the time-overlap graph."""
+    n = len(notes)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if _intervals_overlap(notes[i], notes[j]):
+                union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    return list(groups.values())
+
+
+def _classify(members: list[NoteEvent]) -> str:
+    """Decide single / chord / arpeggio for a connected component.
+
+    - 1 note → single.
+    - 2+ notes that share a non-empty common sounding interval → chord.
+    - 2+ notes connected by pairwise overlap but with no all-members
+      overlap → arpeggio.
+    """
+    if len(members) == 1:
+        return "single"
+    common_start = max(m.start_time for m in members)
+    common_end = min(m.end_time for m in members)
+    return "chord" if common_start < common_end else "arpeggio"
+
+
 def _cluster_notes(notes: list[NoteEvent]) -> list[CandidateCluster]:
-    """Pass 1: group notes into single / chord / arpeggio clusters."""
+    """Pass 1: group notes into single / chord / arpeggio clusters by time-overlap."""
     if not notes:
         return []
 
     notes_sorted = sorted(notes, key=lambda n: n.start_time)
+    components = _connected_components(notes_sorted)
 
-    # Step 1: collect chord groups (greedy left-to-right).
-    used: set[int] = set()
-    chord_groups: list[list[int]] = []
-    for i, n in enumerate(notes_sorted):
-        if i in used:
-            continue
-        group = [i]
-        for j in range(i + 1, len(notes_sorted)):
-            if j in used:
-                continue
-            other = notes_sorted[j]
-            if (abs(other.start_time - n.start_time) <= _CHORD_TOLERANCE_S
-                    and abs(other.end_time - n.end_time) <= _CHORD_TOLERANCE_S):
-                group.append(j)
-        if len(group) >= 2:
-            for k in group:
-                used.add(k)
-            chord_groups.append(group)
-
-    # Step 2: from the remaining notes, find arpeggio runs.
-    remaining_indices = [i for i in range(len(notes_sorted)) if i not in used]
-    arpeggio_groups: list[list[int]] = []
-    run: list[int] = []
-    for idx in remaining_indices:
-        if not run:
-            run = [idx]
-            continue
-        prev_idx = run[-1]
-        gap = notes_sorted[idx].start_time - notes_sorted[prev_idx].start_time
-        if 0.0 <= gap <= _ARPEGGIO_GAP_S:
-            run.append(idx)
-        else:
-            if len(run) >= _ARPEGGIO_MIN_SIZE:
-                arpeggio_groups.append(run)
-                for k in run:
-                    used.add(k)
-            run = [idx]
-    if len(run) >= _ARPEGGIO_MIN_SIZE:
-        arpeggio_groups.append(run)
-        for k in run:
-            used.add(k)
-
-    # Step 3: emit clusters in start-time order.
     cluster_specs: list[tuple[str, list[int]]] = []
-    cluster_specs.extend(("chord", g) for g in chord_groups)
-    cluster_specs.extend(("arpeggio", g) for g in arpeggio_groups)
-    for i in range(len(notes_sorted)):
-        if i not in used:
-            cluster_specs.append(("single", [i]))
+    for comp in components:
+        kind = _classify([notes_sorted[i] for i in comp])
+        cluster_specs.append((kind, comp))
 
     cluster_specs.sort(key=lambda spec: notes_sorted[spec[1][0]].start_time)
 
     clusters: list[CandidateCluster] = []
     for kind, indices in cluster_specs:
-        members = [_build_candidate_note(notes_sorted[i]) for i in indices]
-        start_time = min(m.start_time for m in members)
-        end_time = max(m.end_time for m in members)
-        start_freq = min(m.start_freq for m in members)
-        end_freq = max(m.end_freq for m in members)
+        candidate_members = [_build_candidate_note(notes_sorted[i]) for i in indices]
+        start_time = min(m.start_time for m in candidate_members)
+        end_time = max(m.end_time for m in candidate_members)
+        start_freq = min(m.start_freq for m in candidate_members)
+        end_freq = max(m.end_freq for m in candidate_members)
         clusters.append(CandidateCluster(
             kind=kind,                              # type: ignore[arg-type]
             score=0.0,
@@ -176,7 +175,7 @@ def _cluster_notes(notes: list[NoteEvent]) -> list[CandidateCluster]:
             end_time=end_time,
             start_freq=start_freq,
             end_freq=end_freq,
-            members=members,
+            members=candidate_members,
         ))
 
     return clusters
@@ -191,19 +190,26 @@ def triage_notes(
 ) -> NoteTriageFileData:
     """Three-pass triage: cluster → score → select.
 
-    Optional `start_time`/`end_time` filter notes to a song region (callers
-    already detected the region; this module does not detect song parts).
+    Optional `start_time`/`end_time` restrict which notes are considered as
+    candidates (a note is included iff its start_time is within the window).
+    The polyphony profile is built from ALL notes regardless of window so
+    the polyphony at window boundaries reflects notes that started outside
+    but were still sounding inside.
     """
-    # Filter to time window
+    # Polyphony profile uses all notes — including ones that started outside
+    # the analysis window but still affect polyphony at the window edges.
+    profile = _build_polyphony_profile(notes)
+
+    # Filter for clustering: only notes whose onset falls inside the window
+    # become candidates. Notes that started outside contribute to the profile
+    # but cannot themselves be candidates.
     if start_time is not None:
-        notes = [n for n in notes if n.end_time > start_time]
+        notes = [n for n in notes if n.start_time >= start_time]
     if end_time is not None:
         notes = [n for n in notes if n.start_time < end_time]
 
-    # Filter by minimum duration (existing pluck filter)
+    # Pluck filter
     notes = [n for n in notes if (n.end_time - n.start_time) >= min_duration]
-
-    profile = _build_polyphony_profile(notes)
 
     if not notes:
         return NoteTriageFileData(polyphony_profile=profile, candidates=[])

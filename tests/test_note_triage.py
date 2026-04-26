@@ -220,3 +220,62 @@ def test_triage_empty_notes_returns_empty():
     data = triage_notes([])
     assert data.candidates == []
     assert data.polyphony_profile == []
+
+
+def test_cluster_jittered_chord_still_chord():
+    # Real-world chord with onset jitter beyond the old 30ms tolerance.
+    # All three notes overlap during a common interval [1.10, 1.40] → chord.
+    notes = [
+        _ev(1.00, 1.50, 60),  # C4
+        _ev(1.10, 1.55, 64),  # E4 (onset 100ms after C4)
+        _ev(1.05, 1.40, 67),  # G4 (onset 50ms after C4)
+    ]
+    data = triage_notes(notes, min_duration=0.0)
+    assert len(data.candidates) == 1
+    assert data.candidates[0].kind == "chord"
+    assert len(data.candidates[0].members) == 3
+
+
+def test_cluster_overlap_with_no_common_moment_is_arpeggio():
+    # Three notes connected by pairwise overlap but no instant when all three
+    # are sounding together. A ends before C starts; only B bridges them.
+    notes = [
+        _ev(0.0, 0.5, 60),    # A
+        _ev(0.3, 1.0, 64),    # B  (overlaps A in [0.3, 0.5] and C in [0.6, 1.0])
+        _ev(0.6, 1.2, 67),    # C
+    ]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=10)
+    # All three connected → one component. No common interval → arpeggio.
+    # Arpeggios are filtered, so no candidates.
+    assert all(c.kind != "arpeggio" for c in data.candidates)
+    # And no other clusters exist either, so output should be empty.
+    assert data.candidates == []
+
+
+def test_cluster_overlapping_note_is_not_a_single():
+    # The bug the user found: a note that overlaps with another note must
+    # never be classified as 'single'.
+    notes = [
+        _ev(0.0, 1.0, 60),    # held note
+        _ev(0.3, 0.5, 64),    # short note inside it
+    ]
+    data = triage_notes(notes, min_duration=0.0)
+    assert len(data.candidates) == 1
+    assert data.candidates[0].kind == "chord"  # both members share [0.3, 0.5]
+    assert len(data.candidates[0].members) == 2
+
+
+def test_polyphony_profile_includes_notes_outside_window():
+    # A long note from before the window contributes to polyphony at the window edge.
+    notes = [
+        _ev(0.0, 5.0, 60, amp=0.8),    # spans whole song
+        _ev(2.0, 2.5, 64, amp=0.8),    # candidate inside the window
+    ]
+    data = triage_notes(notes, min_duration=0.0, start_time=2.0, end_time=3.0)
+    # Only the second note's onset is inside [2.0, 3.0] → only it can be a candidate.
+    pitches = [c.members[0].note.pitch_midi for c in data.candidates]
+    assert pitches == [64]
+    # But the polyphony profile should reflect the long note too, so polyphony
+    # at t≈2.0 should be 2, not 1.
+    bucket_at_2 = next(w for w in data.polyphony_profile if w.start_time <= 2.0 < w.end_time)
+    assert bucket_at_2.note_count == 2
