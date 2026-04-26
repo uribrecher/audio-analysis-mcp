@@ -148,6 +148,7 @@ Classifies a list of `NoteEvent`s as monophonic / block_chord / arpeggio. Per sc
 
 **Triage rules:**
 - 0 notes → REJECTED.
+- Max note velocity across all notes < 0.1 → REJECTED (signal-to-noise ratio too poor for reliable ADSR fitting).
 - 1 note → MONOPHONIC.
 - ≥2 notes, all start times within 30 ms of each other AND all end times within 30 ms of each other → BLOCK_CHORD.
 - Otherwise compute onsets-per-second over the clip span; >3 → ARPEGGIO (→ REJECTED in v1); ≤3 → MONOPHONIC (sequential single notes treated as analyzable; the longest one will be used downstream).
@@ -395,7 +396,7 @@ git commit -m "amplitude: add RMS sliding-window envelope extractor"
 
 ## Task 4: ADSR Fitting
 
-Heuristic four-segment fit on an envelope curve, with velocity normalization. The caller passes the peak velocity (0–1 from `NoteEvent.amplitude`) so the fitted `sustain_level` reflects engine-intrinsic shape, not how hard the note was struck.
+Heuristic four-segment fit on an envelope curve. `sustain_level` is computed as a fraction of the envelope's peak (`sustain_rms / envelope.max()`), which is naturally velocity-invariant — both peak and sustain scale linearly with hit-strength, so the ratio recovers the engine-intrinsic shape regardless of how hard the note was struck. Velocity is *not* an input to this stage; it's used by triage (Task 2) to reject low-SNR notes before fitting.
 
 **Algorithm:**
 1. Find peak of envelope → defines attack endpoint.
