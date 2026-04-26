@@ -36,62 +36,6 @@ class TestPolyphonyProfile:
         assert result.polyphony_profile[-1].end_time >= 3.0
 
 
-class TestCandidateSelection:
-    def test_prefer_monophonic_over_polyphonic(self):
-        """A note in a monophonic window scores higher than one in polyphonic."""
-        mono_note = _note(0.0, 1.0, 60)
-        poly_note1 = _note(2.0, 3.0, 64)
-        poly_note2 = _note(2.2, 3.0, 67)  # overlaps with poly_note1
-        result = triage_notes([mono_note, poly_note1, poly_note2])
-        # The monophonic note (pitch 60) should be ranked first
-        assert result.candidates[0].note.pitch_midi == 60
-
-    def test_min_duration_filter(self):
-        """Notes shorter than min_duration are excluded."""
-        short = _note(0.0, 0.3, 60)  # 0.3s — below default 0.5s threshold
-        long = _note(1.0, 2.0, 64)   # 1.0s — above threshold
-        result = triage_notes([short, long], min_duration=0.5)
-        pitches = [c.note.pitch_midi for c in result.candidates]
-        assert 64 in pitches
-        assert 60 not in pitches
-
-    def test_max_candidates_limits_output(self):
-        """No more than max_candidates returned."""
-        notes = [_note(float(i), float(i) + 0.8, 60 + i) for i in range(20)]
-        result = triage_notes(notes, max_candidates=5)
-        assert len(result.candidates) <= 5
-
-    def test_frequency_bounds_from_midi(self):
-        """Candidate freq bounds: lower = fundamental*0.9, upper = min(fundamental*8, 10kHz)."""
-        note = _note(0.0, 1.0, 69)  # A4 = 440 Hz
-        result = triage_notes([note])
-        assert len(result.candidates) == 1
-        c = result.candidates[0]
-        fundamental = librosa.midi_to_hz(69)  # 440.0
-        assert c.start_freq == pytest.approx(fundamental * 0.9, rel=0.01)
-        assert c.end_freq == pytest.approx(min(fundamental * 8, 10000.0), rel=0.01)
-
-    def test_time_bounds_include_padding(self):
-        """Candidate time bounds include 50ms padding before and after."""
-        note = _note(1.0, 2.0, 60)
-        result = triage_notes([note])
-        c = result.candidates[0]
-        assert c.start_time == pytest.approx(0.95, abs=0.01)
-        assert c.end_time == pytest.approx(2.05, abs=0.01)
-
-    def test_time_padding_clamps_to_zero(self):
-        """Start time padding doesn't go below 0."""
-        note = _note(0.01, 1.0, 60)
-        result = triage_notes([note])
-        assert result.candidates[0].start_time >= 0.0
-
-    def test_empty_notes(self):
-        """Empty input → empty profile and candidates."""
-        result = triage_notes([])
-        assert result.polyphony_profile == []
-        assert result.candidates == []
-
-
 from audio_analysis_mcp.analysis.note_triage import _cluster_notes
 
 
@@ -211,3 +155,68 @@ def test_score_longer_duration_helps():
     profile = _build_polyphony_profile([_ev(0.0, 0.6), _ev(2.0, 4.0)])
     assert _score_cluster(long_c, profile, [short, long_c]) > _score_cluster(short, profile, [short, long_c])
 
+
+def test_triage_returns_clusters_sorted_by_score():
+    notes = [
+        _ev(0.0, 0.3, 60, amp=0.2),       # short low-velocity single → low score
+        _ev(2.0, 4.0, 64, amp=0.9),       # long high-velocity single → high score
+        _ev(6.0, 7.0, 67, amp=0.6),       # medium single
+    ]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=10)
+    assert len(data.candidates) == 3
+    # Highest score first
+    assert data.candidates[0].kind == "single"
+    assert data.candidates[0].members[0].note.pitch_midi == 64
+
+
+def test_triage_filters_arpeggios():
+    # Two singles + one arpeggio of 4 notes
+    notes = [
+        _ev(0.0, 1.0, 60),                       # single
+        _ev(2.0, 3.0, 64),                       # single
+        _ev(5.0, 5.2, 60), _ev(5.15, 5.35, 62),  # part of arpeggio
+        _ev(5.30, 5.50, 64), _ev(5.45, 5.65, 65),
+    ]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=10)
+    assert all(c.kind != "arpeggio" for c in data.candidates)
+
+
+def test_triage_min_duration_filters_short_notes():
+    notes = [_ev(0.0, 0.3, 60), _ev(1.0, 2.0, 64)]
+    data = triage_notes(notes, min_duration=0.5)
+    assert len(data.candidates) == 1
+    assert data.candidates[0].members[0].note.pitch_midi == 64
+
+
+def test_triage_respects_time_window():
+    notes = [_ev(0.0, 1.0, 60), _ev(5.0, 6.0, 64), _ev(10.0, 11.0, 67)]
+    data = triage_notes(notes, min_duration=0.0, start_time=4.0, end_time=8.0, max_candidates=10)
+    assert len(data.candidates) == 1
+    assert data.candidates[0].members[0].note.pitch_midi == 64
+
+
+def test_triage_respects_max_candidates():
+    notes = [_ev(i * 2.0, i * 2.0 + 1.0, 60 + i) for i in range(15)]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=5)
+    assert len(data.candidates) == 5
+
+
+def test_triage_pitch_diversity_penalty():
+    # Two equal-shape singles at the same pitch → second one penalized.
+    # Plus one cluster at a different pitch → should win over the second same-pitch one.
+    notes = [
+        _ev(0.0, 1.0, 60, amp=0.9),
+        _ev(2.0, 3.0, 60, amp=0.9),
+        _ev(4.0, 5.0, 72, amp=0.5),
+    ]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=3)
+    pitches = [c.members[0].note.pitch_midi for c in data.candidates]
+    # The first same-pitch instance ranks above the diverse-pitch cluster (because amp=0.9 vs 0.5),
+    # but the second same-pitch instance is penalized below the diverse one.
+    assert pitches.index(60) < pitches.index(72) < pitches.index(60, pitches.index(60) + 1)
+
+
+def test_triage_empty_notes_returns_empty():
+    data = triage_notes([])
+    assert data.candidates == []
+    assert data.polyphony_profile == []
