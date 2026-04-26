@@ -151,5 +151,42 @@ def main():
     print(f"  flag: start==end? {fit3['sustain_start_idx'] == fit3['sustain_end_idx']}")
 
 
+    # Case 4: exponential decay during the "decay" segment instead of linear
+    # Simulates a real synth: attack, exponential decay to sustain, flat sustain, release
+    n_a = int(0.02 * env_sr)
+    n_d = int(0.10 * env_sr)
+    n_s = int(0.50 * env_sr)
+    n_r = int(0.15 * env_sr)
+    sus = 0.6
+    tau = 0.05  # 50ms time constant — typical synth decay
+    t_decay = np.arange(n_d) / env_sr
+    decay_curve = sus + (1.0 - sus) * np.exp(-t_decay / tau)
+    env4 = np.concatenate([
+        np.linspace(0.0, 1.0, n_a, endpoint=False),
+        decay_curve,
+        np.full(n_s, sus),
+        np.linspace(sus, 0.0, n_r, endpoint=True),
+    ]).astype(np.float32)
+    fit4 = fit_adsr(env4, env_sr, peak_velocity=1.0)
+    report("Case 4 — exponential decay segment",
+           fit4,
+           dict(attack_ms=20.0, decay_ms=100.0, sustain_level=0.6, release_ms=150.0),
+           dict(attack_ms=10.0, decay_ms=25.0, sustain_level=0.05, release_ms=25.0))
+
+    # Case 5: long sustain that runs to the very end (no release segment).
+    # Exercises the for-else fallback where sustain_end_idx semantics matter.
+    env5 = np.concatenate([
+        np.linspace(0.0, 1.0, n_a, endpoint=False),
+        np.linspace(1.0, sus, n_d, endpoint=False),
+        np.full(int(0.6 * env_sr), sus),  # sustain runs to end, no release
+    ]).astype(np.float32)
+    fit5 = fit_adsr(env5, env_sr, peak_velocity=1.0)
+    print(f"\n--- Case 5 — sustain runs to envelope end (no release) ---")
+    print(f"env5 size = {env5.size} frames; recovered: {fit5}")
+    sus_len = fit5['sustain_end_idx'] - fit5['sustain_start_idx']
+    print(f"  sustain region length: {sus_len} frames = {sus_len * 1000.0 / env_sr:.0f}ms")
+    print(f"  (true sustain plateau in env: ~{int(0.6 * env_sr)} frames = 600ms; under-count would flag the off-by-window_frames bug)")
+
+
 if __name__ == "__main__":
     main()
