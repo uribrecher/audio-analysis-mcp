@@ -26,7 +26,7 @@
 - T1 — schemas (`AmplitudeCandidate`, `AmplitudeAnalyzeResult`)
 - T6 — orchestrator (per-cluster iteration + consistency check)
 - T7 — MCP tool
-- T8 — SignalFlow integration test (slow)
+- T8 — SignalFlow integration test (deferred — see Task 8 section for rationale)
 - T9 — docs
 
 ---
@@ -631,117 +631,57 @@ git commit -m "amplitude: add amplitude_analyze MCP tool and workspace dir"
 
 ---
 
-## Task 8: SignalFlow Integration Test (slow)
+## Task 8: SignalFlow Integration Test — DEFERRED
 
-One end-to-end check: render a synth note via SignalFlow with known ADSR; manually fabricate a single-cluster triage; run the amplitude tool; verify recovered ADSR within tolerance and `is_consistent=True` (only one candidate → trivially consistent).
+**Status: skipped in this iteration.** SignalFlow stays out of the dev-deps. The unit tests in `tests/test_amplitude.py` already exercise the full `envelope → fit → isolate → consensus` chain with synthetic audio (sine × hand-built envelope), which is mathematically equivalent to what a basic SignalFlow render would produce. We deferred this slow integration test for two concrete reasons surfaced during scratch validation:
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `tests/test_amplitude_signalflow.py`
+### Why deferred — issue 1: ASR (no decay) breaks the fitter
 
-- [ ] **Step 1: Add SignalFlow as a dev dependency**
-
-Edit `pyproject.toml` to include `signalflow` in the dev-deps section (match the existing style — likely `[tool.uv]` or `dependency-groups.dev`):
+A typical SignalFlow envelope is **ASR** — Attack, Sustain, Release. There is no decay segment, so the envelope ramps up (attack), stays flat at the maximum (sustain), then ramps down (release). The amplitude curve looks like this:
 
 ```
-"signalflow>=0.4.0",
+amplitude
+   1.0  ┌───────────────────┐
+        │                   │
+        │                   │
+   0    ┘                   └────
+        ↑                   ↑
+       attack ends       release begins
 ```
 
-Then `uv sync --dev`.
+Our `fit_adsr` algorithm relies on `argmax` to locate the peak, which it then uses as the boundary between attack and decay. With ADSR (Attack, Decay, Sustain, Release), the peak is a single sharp moment at the end of the attack — `argmax` finds it cleanly. With ASR, the entire sustain plateau is at the maximum value, and `argmax` returns whichever frame happens to have a tiny RMS-noise-driven jitter that's slightly higher than its neighbors. In our scratch test, this landed `argmax` 375ms into the plateau, giving a recovered attack of 514ms when the true attack was 20ms — wildly wrong.
 
-If the install fails on macOS due to PortAudio: `brew install portaudio` then re-run `uv sync --dev`.
+This is a real limitation of `fit_adsr` to address later: when the envelope is flat at peak (no decay), the algorithm should detect the plateau and use the *first* frame at the plateau level as the attack endpoint, not `argmax`. Out of scope for now.
 
-If you need to introspect the SignalFlow API (constructor names, etc.), write a small `scratch/explore_signalflow.py` and run it with `uv run python scratch/explore_signalflow.py`. **Do not use `python -c "..."` inline.**
+### Why deferred — issue 2: SignalFlow's ADSREnvelope needs a "gate" signal
 
-- [ ] **Step 2: Write the slow test**
+SignalFlow does have a 4-segment `ADSREnvelope` class, which would have a clear peak and avoid issue 1. But it doesn't take a duration. Instead, it expects a **gate** — a signal that says "the key is currently held down" (gate=1) and then "the key was just released, start the release phase" (gate=0).
 
-Create `tests/test_amplitude_signalflow.py`:
+Think of a real synth keyboard: when you press a key, the envelope plays attack→decay→sustain and then *holds* at the sustain level for as long as you keep your finger on the key. When you let go, the release phase plays. The ADSR envelope itself has no idea how long the note will last — that's controlled by your finger, expressed as the gate signal.
 
-```python
-import json
-from pathlib import Path
+For a real-time interactive use, this is natural — you wire the keyboard input to the gate. For an *offline* render (one-shot "give me 1.5 seconds of audio"), there's no easy way to say "hold the gate at 1 for the first 800ms, then drop it to 0." It's possible — you can write a separate scheduling node that flips the gate at the right time — but it's extra plumbing that doesn't earn its keep when the unit tests already cover the integration we'd be checking.
 
-import numpy as np
-import pytest
-import soundfile as sf
+### What we keep
 
-from audio_analysis_mcp.analysis.amplitude import analyze_amplitude
-from audio_analysis_mcp.schemas import (
-    CandidateCluster,
-    CandidateNote,
-    NoteEvent,
-    NoteTriageFileData,
-)
+- `scratch/explore_signalflow.py` is committed (in the next commit), documenting both issues with reproducible runs. If a future iteration needs to revisit, the diagnostic work is there.
+- `tests/test_amplitude.py` orchestrator tests (4 of them) cover the full pipeline with hand-built ADSR audio — same envelope shape a SignalFlow render would produce, just authored in numpy.
 
+### What we deferred
 
-@pytest.mark.slow
-def test_signalflow_rendered_adsr_recovered(tmp_path: Path):
-    from signalflow import AudioGraph, SineOscillator, ASREnvelope
+- A real SignalFlow integration test exercising the install path (cross-platform wheels, PortAudio).
+- A test that fits ADSR from an audio source we didn't synthesize ourselves with the very envelope shape `fit_adsr` expects.
+- A regression test for issue 1 (ASR plateau peak) — when we fix that limitation in `fit_adsr`, we'll add the scratch case as a unit test.
 
-    sr = 44100
-    duration = 1.5
-    attack_s, sustain_s, release_s = 0.020, 0.600, 0.200
+- [ ] **Step 1: Commit the scratch file documenting both issues**
 
-    graph = AudioGraph(output_device=None, start=False)
-    osc = SineOscillator(frequency=440.0)
-    env = ASREnvelope(attack=attack_s, sustain=sustain_s, release=release_s)
-    out = osc * env
-
-    n_samples = int(sr * duration)
-    buffer = graph.render_to_buffer(out, num_frames=n_samples)
-    audio = np.asarray(buffer.data[0], dtype=np.float32)
-
-    audio_path = tmp_path / "signalflow_note.wav"
-    sf.write(audio_path, audio, sr)
-
-    cluster = CandidateCluster(
-        kind="single", score=3.0,
-        start_time=0.0, end_time=float(audio.size) / sr,
-        start_freq=200.0, end_freq=2000.0,
-        members=[CandidateNote(
-            note=NoteEvent(start_time=0.0, end_time=float(audio.size) / sr,
-                           pitch_midi=69, amplitude=1.0, pitch_bends=None),
-            score=3.0, start_time=0.0, end_time=float(audio.size) / sr,
-            start_freq=200.0, end_freq=2000.0,
-        )],
-    )
-    triage_path = tmp_path / "triage.json"
-    triage_path.write_text(NoteTriageFileData(
-        polyphony_profile=[], candidates=[cluster],
-    ).model_dump_json(indent=2))
-
-    result = analyze_amplitude(
-        audio=audio, sample_rate=sr,
-        triage_path=triage_path, output_dir=tmp_path / "amp",
-    )
-
-    assert result.rejected_reason is None
-    assert len(result.candidates) == 1
-    assert result.is_consistent  # single candidate → trivially consistent
-    adsr = result.candidates[0].adsr
-    assert abs(adsr.attack_ms - 20.0) < 25.0
-    assert abs(adsr.release_ms - 200.0) < 60.0
-    assert adsr.sustain_level > 0.5
-```
-
-(If SignalFlow's API names differ in the installed version, update the import / constructor calls accordingly.)
-
-- [ ] **Step 3: Run the slow test explicitly**
-
-Run: `uv run pytest tests/test_amplitude_signalflow.py -v -m slow`
-Expected: PASS. If tolerances are breached, adjust the test tolerances (these are realistic-synth-audio bounds, not algorithmic correctness bounds — looser than the unit-test tolerances).
-
-Then verify it does NOT run by default:
-
-Run: `uv run pytest -m "not slow" -v`
-Expected: the SignalFlow test is skipped/not collected.
-
-- [ ] **Step 4: Commit**
+The scratch was created during validation. Confirm it's committed alongside the plan revision:
 
 ```bash
-git add pyproject.toml uv.lock tests/test_amplitude_signalflow.py
-git commit -m "amplitude: add SignalFlow-rendered ADSR integration test (slow)"
+git add scratch/explore_signalflow.py
+git commit -m "amplitude: document why SignalFlow integration test is deferred"
 ```
+
+(If the scratch is already tracked, this is a no-op.)
 
 ---
 
