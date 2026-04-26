@@ -72,20 +72,27 @@ def fit_adsr(
                 sustain_end_idx = i
                 break
         else:
-            sustain_end_idx = envelope.size - window_frames
+            # Sustain runs to the end of the envelope. Exclusive end = envelope.size.
+            sustain_end_idx = envelope.size
 
     sustain_duration_ms = _frame_to_ms(sustain_end_idx - sustain_start_idx, envelope_sample_rate)
 
     if not found_start or sustain_duration_ms < _MIN_SUSTAIN_MS:
-        # Pluck fallback: locate where envelope drops below 50% of peak after the peak
+        # Pluck fallback: locate where envelope drops below 50% of peak after the peak.
+        # Early return for readability — none of the sustain-region math applies here.
         below = np.where(envelope[peak_idx:] < _PLUCK_FALLBACK_FRACTION * peak)[0]
         marker = peak_idx + int(below[0]) if below.size > 0 else envelope.size - 1
-        sustain_start_idx = marker
-        sustain_end_idx = marker
-        sustain_level_raw = 0.0
-    else:
-        sustain_level_raw = float(envelope[sustain_start_idx:sustain_end_idx].mean())
+        decay_ms = _frame_to_ms(marker - peak_idx, envelope_sample_rate)
+        return ADSRFit(
+            attack_ms=attack_ms,
+            decay_ms=decay_ms,
+            sustain_level=0.0,
+            release_ms=0.0,
+            sustain_start_idx=marker,
+            sustain_end_idx=marker,
+        )
 
+    sustain_level_raw = float(envelope[sustain_start_idx:sustain_end_idx].mean())
     sustain_level = float(np.clip(sustain_level_raw / peak_velocity, 0.0, 1.0))
     decay_ms = _frame_to_ms(sustain_start_idx - peak_idx, envelope_sample_rate)
 
