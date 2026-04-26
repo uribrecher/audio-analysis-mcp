@@ -8,5 +8,6 @@ import audio_analysis_mcp.tools.audio_compare  # noqa: F401
 import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
 import audio_analysis_mcp.tools.note_triage  # noqa: F401
 import audio_analysis_mcp.tools.note_isolate  # noqa: F401
+import audio_analysis_mcp.tools.amplitude_analyze  # noqa: F401
 
 mcp.run(transport="stdio")

@@ -20,6 +20,7 @@ import audio_analysis_mcp.tools.audio_compare  # noqa: F401
 import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
 import audio_analysis_mcp.tools.note_triage  # noqa: F401
 import audio_analysis_mcp.tools.note_isolate  # noqa: F401
+import audio_analysis_mcp.tools.amplitude_analyze  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -79,13 +80,11 @@ def _mock_predict_result(notes: list[tuple[float, float, int, float]]):
 
 
 @patch("audio_analysis_mcp.analysis.transcription.predict")
-def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path):
+def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path):
     from audio_analysis_mcp.tools.note_transcribe import note_transcribe
 
-    # Set up a job folder with a stem file
-    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
-    stem_dir.mkdir(parents=True)
-    stem_file = stem_dir / "bass.wav"
+    ws = srv.get_workspace()
+    stem_file = ws.job_stem_file("test-song", "fast", "bass")
     shutil.copy(sine_440_wav, stem_file)
 
     mock_predict.return_value = _mock_predict_result([
@@ -98,13 +97,65 @@ def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_pa
     assert "test-song/transcriptions/bass_fast" in result["midi_path"]
 
 
-def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
+def test_note_triage_returns_clusters(sine_440_wav: Path):
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    ws = srv.get_workspace()
+    stem_file = ws.job_stem_file("test-song", "fast", "bass")
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.0, end_time=0.3, pitch_midi=60, amplitude=0.5, pitch_bends=None),
+        NoteEvent(start_time=2.0, end_time=4.0, pitch_midi=64, amplitude=0.9, pitch_bends=None),
+        NoteEvent(start_time=6.0, end_time=7.0, pitch_midi=67, amplitude=0.6, pitch_bends=None),
+        NoteEvent(start_time=6.0, end_time=7.0, pitch_midi=71, amplitude=0.6, pitch_bends=None),
+    ]
+    notes_path = ws.job_notes_file("test-song")
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    result = json.loads(note_triage(audio_path=str(stem_file), notes_path=str(notes_path)))
+    assert result["candidate_count"] >= 1
+
+    top = result["top_candidates"][0]
+    # Cluster shape:
+    assert top["kind"] in ("single", "chord")
+    assert "score" in top
+    assert "members" in top and len(top["members"]) >= 1
+    # The long high-velocity single (pitch 64) should rank highly:
+    pitches = [m["note"]["pitch_midi"] for c in result["top_candidates"] for m in c["members"]]
+    assert 64 in pitches
+
+
+def test_note_triage_respects_time_window(sine_440_wav: Path):
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    ws = srv.get_workspace()
+    stem_file = ws.job_stem_file("test-song", "fast", "bass")
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.0, end_time=1.0, pitch_midi=60, amplitude=0.8, pitch_bends=None),
+        NoteEvent(start_time=5.0, end_time=6.0, pitch_midi=64, amplitude=0.8, pitch_bends=None),
+        NoteEvent(start_time=10.0, end_time=11.0, pitch_midi=67, amplitude=0.8, pitch_bends=None),
+    ]
+    notes_path = ws.job_notes_file("test-song")
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    result = json.loads(note_triage(
+        audio_path=str(stem_file), notes_path=str(notes_path),
+        start_time=4.0, end_time=8.0,
+    ))
+    assert result["candidate_count"] == 1
+    assert result["top_candidates"][0]["members"][0]["note"]["pitch_midi"] == 64
+
+
+def test_note_isolate_e2e(sine_440_wav: Path):
     from audio_analysis_mcp.tools.note_isolate import note_isolate
 
-    # Set up a job folder with a stem file
-    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
-    stem_dir.mkdir(parents=True)
-    stem_file = stem_dir / "bass.wav"
+    ws = srv.get_workspace()
+    stem_file = ws.job_stem_file("test-song", "fast", "bass")
     shutil.copy(sine_440_wav, stem_file)
 
     result = json.loads(
@@ -121,3 +172,32 @@ def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
     assert result["duration_seconds"] > 0
     assert "note_001_A4_0.0s.wav" in result["audio_path"]
     assert "test-song/isolated_notes/bass_fast" in result["audio_path"]
+
+
+def test_amplitude_analyze_e2e(sine_440_wav: Path):
+    """End-to-end: triage → amplitude_analyze produces per-cluster outputs."""
+    from audio_analysis_mcp.tools.amplitude_analyze import amplitude_analyze
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    ws = srv.get_workspace()
+    stem_file = ws.job_stem_file("test-song", "fast", "bass")
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.05, end_time=0.95, pitch_midi=69, amplitude=0.8, pitch_bends=None),
+    ]
+    notes_path = ws.job_notes_file("test-song")
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    triage_json = json.loads(note_triage(audio_path=str(stem_file), notes_path=str(notes_path), min_duration=0.0))
+    triage_path = triage_json["triage_path"]
+
+    result_json = amplitude_analyze(audio_path=str(stem_file), triage_path=triage_path)
+    payload = json.loads(result_json)
+    # Single 1-second sine note → triage produces ≥1 cluster → orchestrator analyzes it.
+    # The sine wave has no real ADSR shape, so sustain may or may not be present; either way
+    # the tool must return a valid result structure.
+    assert "candidates" in payload
+    assert "is_consistent" in payload
+    assert "divergence_score" in payload
