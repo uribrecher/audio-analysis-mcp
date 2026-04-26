@@ -265,6 +265,46 @@ def test_cluster_overlapping_note_is_not_a_single():
     assert len(data.candidates[0].members) == 2
 
 
+def test_jitter_tolerance_default_is_strict():
+    # Two notes that don't quite overlap (5ms gap between A's end and B's start).
+    # Default jitter_tolerance=0.0 → they remain separate singles.
+    notes = [_ev(0.0, 1.0, 60), _ev(1.005, 2.0, 64)]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=10)
+    assert len(data.candidates) == 2
+    assert all(c.kind == "single" for c in data.candidates)
+
+
+def test_jitter_tolerance_groups_near_overlap():
+    # Same two notes — with a 30ms jitter tolerance they get linked.
+    # The two notes' effective ranges overlap so they form a 2-note cluster.
+    # Common interval check: max(starts) - min(ends) = 1.005 - 1.0 = 0.005s
+    # < jitter (0.030) → still classified as a chord.
+    notes = [_ev(0.0, 1.0, 60), _ev(1.005, 2.0, 64)]
+    data = triage_notes(notes, min_duration=0.0, max_candidates=10, jitter_tolerance=0.030)
+    assert len(data.candidates) == 1
+    assert data.candidates[0].kind == "chord"
+    assert len(data.candidates[0].members) == 2
+
+
+def test_jitter_tolerance_jittered_chord_onsets():
+    # A chord struck simultaneously but transcribed with onset jitter beyond
+    # the strict overlap window. With jitter_tolerance=0.0 the algorithm can
+    # still recover it (members all overlap). With jitter_tolerance=0.1 it
+    # also recovers chords with broader detection slack.
+    notes = [
+        _ev(1.0, 1.05, 60),   # very short — ends before B/C even start
+        _ev(1.10, 1.50, 64),  # starts AFTER A ends — strict gap 50ms
+        _ev(1.15, 1.50, 67),  # starts AFTER A ends — strict gap 100ms
+    ]
+    # Strict: A doesn't overlap B or C; B and C share [1.15, 1.50] → chord of B+C, plus a single A.
+    strict = triage_notes(notes, min_duration=0.0, max_candidates=10, jitter_tolerance=0.0)
+    assert len(strict.candidates) == 2
+    # With 100ms jitter, A connects to B (50ms gap), and (B-C share an interval directly):
+    # All three end up in one cluster.
+    relaxed = triage_notes(notes, min_duration=0.0, max_candidates=10, jitter_tolerance=0.100)
+    assert len(relaxed.candidates) == 1
+
+
 def test_polyphony_profile_includes_notes_outside_window():
     # A long note from before the window contributes to polyphony at the window edge.
     notes = [

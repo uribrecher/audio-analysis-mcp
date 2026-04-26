@@ -99,12 +99,18 @@ def _build_candidate_note(note: NoteEvent) -> CandidateNote:
     )
 
 
-def _intervals_overlap(a: NoteEvent, b: NoteEvent) -> bool:
-    """True iff a and b are sounding simultaneously at some moment."""
-    return a.start_time < b.end_time and a.end_time > b.start_time
+def _intervals_overlap(a: NoteEvent, b: NoteEvent, jitter: float = 0.0) -> bool:
+    """True iff a and b are sounding simultaneously at some moment.
+
+    `jitter` (seconds) is a tolerance budget that pads each interval by
+    jitter/2 on both sides — useful for absorbing onset/offset jitter from
+    transcription so chord members played together but slightly misaligned
+    still cluster correctly. With jitter=0 the check is a strict overlap.
+    """
+    return a.start_time < b.end_time + jitter and b.start_time < a.end_time + jitter
 
 
-def _connected_components(notes: list[NoteEvent]) -> list[list[int]]:
+def _connected_components(notes: list[NoteEvent], jitter: float = 0.0) -> list[list[int]]:
     """Group note indices into connected components of the time-overlap graph."""
     n = len(notes)
     parent = list(range(n))
@@ -122,7 +128,7 @@ def _connected_components(notes: list[NoteEvent]) -> list[list[int]]:
 
     for i in range(n):
         for j in range(i + 1, n):
-            if _intervals_overlap(notes[i], notes[j]):
+            if _intervals_overlap(notes[i], notes[j], jitter):
                 union(i, j)
 
     groups: dict[int, list[int]] = {}
@@ -131,32 +137,33 @@ def _connected_components(notes: list[NoteEvent]) -> list[list[int]]:
     return list(groups.values())
 
 
-def _classify(members: list[NoteEvent]) -> str:
+def _classify(members: list[NoteEvent], jitter: float = 0.0) -> str:
     """Decide single / chord / arpeggio for a connected component.
 
     - 1 note → single.
-    - 2+ notes that share a non-empty common sounding interval → chord.
-    - 2+ notes connected by pairwise overlap but with no all-members
-      overlap → arpeggio.
+    - 2+ notes that share a non-empty common sounding interval (allowing
+      `jitter` seconds of slack) → chord.
+    - 2+ notes connected by pairwise overlap but with no near-common
+      sounding window → arpeggio.
     """
     if len(members) == 1:
         return "single"
     common_start = max(m.start_time for m in members)
     common_end = min(m.end_time for m in members)
-    return "chord" if common_start < common_end else "arpeggio"
+    return "chord" if common_start < common_end + jitter else "arpeggio"
 
 
-def _cluster_notes(notes: list[NoteEvent]) -> list[CandidateCluster]:
+def _cluster_notes(notes: list[NoteEvent], jitter: float = 0.0) -> list[CandidateCluster]:
     """Pass 1: group notes into single / chord / arpeggio clusters by time-overlap."""
     if not notes:
         return []
 
     notes_sorted = sorted(notes, key=lambda n: n.start_time)
-    components = _connected_components(notes_sorted)
+    components = _connected_components(notes_sorted, jitter)
 
     cluster_specs: list[tuple[str, list[int]]] = []
     for comp in components:
-        kind = _classify([notes_sorted[i] for i in comp])
+        kind = _classify([notes_sorted[i] for i in comp], jitter)
         cluster_specs.append((kind, comp))
 
     cluster_specs.sort(key=lambda spec: notes_sorted[spec[1][0]].start_time)
@@ -187,6 +194,7 @@ def triage_notes(
     max_candidates: int = 10,
     start_time: float | None = None,
     end_time: float | None = None,
+    jitter_tolerance: float = 0.0,
 ) -> NoteTriageFileData:
     """Three-pass triage: cluster → score → select.
 
@@ -195,6 +203,12 @@ def triage_notes(
     The polyphony profile is built from ALL notes regardless of window so
     the polyphony at window boundaries reflects notes that started outside
     but were still sounding inside.
+
+    `jitter_tolerance` (seconds, default 0.0 = strict overlap) widens the
+    chord-detection window: notes whose intervals nearly overlap (within
+    jitter ms) are clustered together. Useful for absorbing transcription
+    onset/offset jitter when the source audio was struck as a chord but
+    detected with member onsets up to ~150ms apart.
     """
     # Polyphony profile uses all notes — including ones that started outside
     # the analysis window but still affect polyphony at the window edges.
@@ -215,7 +229,7 @@ def triage_notes(
         return NoteTriageFileData(polyphony_profile=profile, candidates=[])
 
     # Pass 1: clustering
-    clusters = _cluster_notes(notes)
+    clusters = _cluster_notes(notes, jitter=jitter_tolerance)
 
     # Pass 2: score each cluster
     scored: list[tuple[CandidateCluster, float]] = [

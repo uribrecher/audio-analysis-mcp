@@ -16,11 +16,15 @@ def note_triage(
     max_candidates: int = 10,
     start_time: float | None = None,
     end_time: float | None = None,
+    jitter_tolerance: float = 0.0,
 ) -> str:
     """Triage notes into ranked clusters (single / chord) for downstream analysis.
 
     notes_path must be the JSON file from note_transcribe.
     Optional start_time/end_time filter notes to a song region.
+    Optional jitter_tolerance (seconds, default 0.0) widens chord detection
+    by absorbing onset/offset jitter — useful when transcribed chord members
+    have detected onsets that don't perfectly align (typical: 30-150 ms).
     """
     ws = get_workspace()
     ctx = resolve_job_context(audio_path, ws)
@@ -39,6 +43,7 @@ def note_triage(
         max_candidates=max_candidates,
         start_time=start_time,
         end_time=end_time,
+        jitter_tolerance=jitter_tolerance,
     )
 
     triage_dir = ws.job_triage_dir(ctx.job_name, ctx.stem, ctx.preset)
