@@ -70,11 +70,21 @@ def analyze_amplitude(
             sf.write(slice_path, sustain, sample_rate)
             sustain_path = str(slice_path)
 
+        # Debug-only sustain duration; NOT part of the ADSR profile or the
+        # divergence metric — see plan.
+        sustain_duration_ms = (
+            (fit.sustain_end_idx - fit.sustain_start_idx)
+            * env_result.hop_length
+            * 1000.0
+            / sample_rate
+        )
+
         candidates.append(AmplitudeCandidate(
             cluster_index=idx,
             kind=cluster.kind,
             score=cluster.score,
             adsr=adsr,
+            sustain_duration_ms=round(sustain_duration_ms, 2),
             envelope_curve_path=str(envelope_path),
             sustain_slice_path=sustain_path,
         ))

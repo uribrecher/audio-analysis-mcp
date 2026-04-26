@@ -154,6 +154,7 @@ class AmplitudeCandidate(BaseModel):
     kind: Literal["single", "chord"]         # arpeggios are filtered upstream by triage
     score: float                              # cluster's triage score (preserved for traceability)
     adsr: ADSREstimate
+    sustain_duration_ms: float                # debug-only; NOT part of the ADSR profile or distance metric
     envelope_curve_path: str
     sustain_slice_path: str | None
 

@@ -22,6 +22,7 @@ def _candidate(idx: int = 0) -> AmplitudeCandidate:
         kind="single",
         score=2.5,
         adsr=ADSREstimate(attack_ms=20.0, decay_ms=100.0, sustain_level=0.6, release_ms=150.0),
+        sustain_duration_ms=420.0,
         envelope_curve_path=f"/tmp/c{idx}/envelope.npy",
         sustain_slice_path=f"/tmp/c{idx}/sustain.wav",
     )
@@ -37,10 +38,12 @@ def test_amplitude_candidate_chord_no_sustain():
     c = AmplitudeCandidate(
         cluster_index=3, kind="chord", score=1.8,
         adsr=ADSREstimate(attack_ms=15.0, decay_ms=60.0, sustain_level=0.4, release_ms=80.0),
+        sustain_duration_ms=80.0,
         envelope_curve_path="/tmp/c3/envelope.npy",
         sustain_slice_path=None,
     )
     assert c.sustain_slice_path is None
+    assert c.sustain_duration_ms == 80.0
 
 
 def test_amplitude_analyze_result_consistent():
@@ -185,6 +188,48 @@ def test_orchestrator_writes_per_cluster_outputs(tmp_path: Path):
     if c.sustain_slice_path:
         assert "cluster_00" in c.sustain_slice_path
         assert Path(c.sustain_slice_path).exists()
+
+
+def test_orchestrator_reports_sustain_duration(tmp_path: Path):
+    # _adsr_audio synthesizes ~500ms sustain at amplitude 0.6.
+    # The detected sustain region should be in roughly the same ballpark.
+    audio = _adsr_audio(0.77)
+    clusters = [_cluster_at(0.0, audio.size / SR, 60)]
+    triage_path = _write_triage(tmp_path, clusters)
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    c = result.candidates[0]
+    assert c.sustain_duration_ms > 0
+    # Loose bound — the heuristic doesn't recover the exact 500ms, but it
+    # should land between 100ms (sustain isolation gate) and 700ms (clip length).
+    assert 100.0 <= c.sustain_duration_ms <= 700.0
+
+
+def test_sustain_duration_does_not_affect_divergence(tmp_path: Path):
+    # Two clusters with the same canonical 4-tuple ADSR but different
+    # sustain durations must still be flagged as consistent (zero divergence
+    # on the 4-axis vector).
+    note_a = _adsr_audio(duration_s=0.77)
+    silence = np.zeros(int(0.5 * SR), dtype=np.float32)
+    note_b = _adsr_audio(duration_s=0.77)
+    audio = np.concatenate([note_a, silence, note_b])
+
+    end_a = note_a.size / SR
+    start_b = (note_a.size + silence.size) / SR
+    end_b = audio.size / SR
+    clusters = [
+        _cluster_at(0.0, end_a, 60),
+        _cluster_at(start_b, end_b, 64),
+    ]
+    triage_path = _write_triage(tmp_path, clusters)
+    result = analyze_amplitude(
+        audio=audio, sample_rate=SR,
+        triage_path=triage_path, output_dir=tmp_path / "amp",
+    )
+    assert result.is_consistent
+    assert result.divergence_score < 0.05  # essentially zero — the two clusters are identical
 
 
 def test_workspace_job_amplitude_dir(tmp_path: Path):
