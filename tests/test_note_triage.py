@@ -90,3 +90,65 @@ class TestCandidateSelection:
         result = triage_notes([])
         assert result.polyphony_profile == []
         assert result.candidates == []
+
+
+from audio_analysis_mcp.analysis.note_triage import _cluster_notes
+
+
+def _ev(start: float, end: float, pitch: int = 60, amp: float = 0.8) -> NoteEvent:
+    return NoteEvent(
+        start_time=start, end_time=end, pitch_midi=pitch, amplitude=amp, pitch_bends=None
+    )
+
+
+def test_cluster_empty():
+    assert _cluster_notes([]) == []
+
+
+def test_cluster_single_note():
+    clusters = _cluster_notes([_ev(0.0, 1.0)])
+    assert len(clusters) == 1
+    assert clusters[0].kind == "single"
+    assert len(clusters[0].members) == 1
+
+
+def test_cluster_chord_three_simultaneous():
+    notes = [_ev(0.0, 1.0, 60), _ev(0.01, 1.0, 64), _ev(0.02, 0.99, 67)]
+    clusters = _cluster_notes(notes)
+    assert len(clusters) == 1
+    assert clusters[0].kind == "chord"
+    assert len(clusters[0].members) == 3
+
+
+def test_cluster_arpeggio_six_notes():
+    # 6 notes spaced 100 ms apart: each onset gap is 100 ms ≤ 150 ms threshold
+    notes = [_ev(i * 0.1, i * 0.1 + 0.4, 60 + i) for i in range(6)]
+    clusters = _cluster_notes(notes)
+    assert len(clusters) == 1
+    assert clusters[0].kind == "arpeggio"
+    assert len(clusters[0].members) == 6
+
+
+def test_cluster_arpeggio_minimum_size_3():
+    # Two sequential notes are NOT an arpeggio → two singles
+    notes = [_ev(0.0, 0.4, 60), _ev(0.45, 0.85, 62)]
+    clusters = _cluster_notes(notes)
+    assert {c.kind for c in clusters} == {"single"}
+    assert len(clusters) == 2
+
+
+def test_cluster_mixed_chord_and_single():
+    # A chord at t=0..1 + a sequential single note at t=2..3
+    notes = [_ev(0.0, 1.0, 60), _ev(0.0, 1.0, 64), _ev(2.0, 3.0, 72)]
+    clusters = _cluster_notes(notes)
+    assert len(clusters) == 2
+    assert {c.kind for c in clusters} == {"chord", "single"}
+
+
+def test_cluster_arpeggio_breaks_on_long_gap():
+    # 4 notes with onsets at 0.0, 0.1, 0.5 (gap 400ms > 150ms), 0.6 → first 2 too short for arpeggio,
+    # last 2 too short → 4 singles
+    notes = [_ev(0.0, 0.1), _ev(0.1, 0.2), _ev(0.5, 0.6), _ev(0.6, 0.7)]
+    clusters = _cluster_notes(notes)
+    assert all(c.kind == "single" for c in clusters)
+    assert len(clusters) == 4

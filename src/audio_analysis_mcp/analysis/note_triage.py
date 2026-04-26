@@ -5,6 +5,7 @@ from audio_analysis_mcp.schemas import (
     NoteEvent,
     PolyphonyWindow,
     CandidateNote,
+    CandidateCluster,
     NoteTriageFileData,
 )
 
@@ -80,6 +81,104 @@ def _score_note(
     gap_score = float(np.log1p(gap))
 
     return poly_score * 2.0 + dur_score + gap_score * 0.5
+
+
+_CHORD_TOLERANCE_S = 0.030
+_ARPEGGIO_GAP_S = 0.150
+_ARPEGGIO_MIN_SIZE = 3
+
+
+def _build_candidate_note(note: NoteEvent) -> CandidateNote:
+    start_freq, end_freq = _freq_bounds(note.pitch_midi)
+    padded_start = max(0.0, note.start_time - TIME_PADDING)
+    padded_end = note.end_time + TIME_PADDING
+    return CandidateNote(
+        note=note,
+        score=0.0,                       # filled in by Task 4
+        start_time=padded_start,
+        end_time=padded_end,
+        start_freq=round(start_freq, 2),
+        end_freq=round(end_freq, 2),
+    )
+
+
+def _cluster_notes(notes: list[NoteEvent]) -> list[CandidateCluster]:
+    """Pass 1: group notes into single / chord / arpeggio clusters."""
+    if not notes:
+        return []
+
+    notes_sorted = sorted(notes, key=lambda n: n.start_time)
+
+    # Step 1: collect chord groups (greedy left-to-right).
+    used: set[int] = set()
+    chord_groups: list[list[int]] = []
+    for i, n in enumerate(notes_sorted):
+        if i in used:
+            continue
+        group = [i]
+        for j in range(i + 1, len(notes_sorted)):
+            if j in used:
+                continue
+            other = notes_sorted[j]
+            if (abs(other.start_time - n.start_time) <= _CHORD_TOLERANCE_S
+                    and abs(other.end_time - n.end_time) <= _CHORD_TOLERANCE_S):
+                group.append(j)
+        if len(group) >= 2:
+            for k in group:
+                used.add(k)
+            chord_groups.append(group)
+
+    # Step 2: from the remaining notes, find arpeggio runs.
+    remaining_indices = [i for i in range(len(notes_sorted)) if i not in used]
+    arpeggio_groups: list[list[int]] = []
+    run: list[int] = []
+    for idx in remaining_indices:
+        if not run:
+            run = [idx]
+            continue
+        prev_idx = run[-1]
+        gap = notes_sorted[idx].start_time - notes_sorted[prev_idx].start_time
+        if 0.0 <= gap <= _ARPEGGIO_GAP_S:
+            run.append(idx)
+        else:
+            if len(run) >= _ARPEGGIO_MIN_SIZE:
+                arpeggio_groups.append(run)
+                for k in run:
+                    used.add(k)
+            run = [idx]
+    if len(run) >= _ARPEGGIO_MIN_SIZE:
+        arpeggio_groups.append(run)
+        for k in run:
+            used.add(k)
+
+    # Step 3: emit clusters in start-time order.
+    cluster_specs: list[tuple[str, list[int]]] = []
+    cluster_specs.extend(("chord", g) for g in chord_groups)
+    cluster_specs.extend(("arpeggio", g) for g in arpeggio_groups)
+    for i in range(len(notes_sorted)):
+        if i not in used:
+            cluster_specs.append(("single", [i]))
+
+    cluster_specs.sort(key=lambda spec: notes_sorted[spec[1][0]].start_time)
+
+    clusters: list[CandidateCluster] = []
+    for kind, indices in cluster_specs:
+        members = [_build_candidate_note(notes_sorted[i]) for i in indices]
+        start_time = min(m.start_time for m in members)
+        end_time = max(m.end_time for m in members)
+        start_freq = min(m.start_freq for m in members)
+        end_freq = max(m.end_freq for m in members)
+        clusters.append(CandidateCluster(
+            kind=kind,                              # type: ignore[arg-type]
+            score=0.0,
+            start_time=start_time,
+            end_time=end_time,
+            start_freq=start_freq,
+            end_freq=end_freq,
+            members=members,
+        ))
+
+    return clusters
 
 
 def triage_notes(
