@@ -14,6 +14,24 @@ def amplitude_analyze(
 ) -> str:
     """Per-cluster ADSR analysis with cross-candidate consistency check.
 
+    NOT READY FOR PRODUCTION. Manual testing on real synth audio (Van
+    Halen "Jump") showed the heuristic ADSR fitter is meaningfully off in
+    every component. See docs/TODO.md for the full list. Top issues:
+
+      - Attack end is taken at the RMS peak, but on real synth tones the
+        true attack ends earlier — at the RMS-slope inflection (where the
+        second derivative crosses zero). Peak-based attack is inflated.
+      - Decay segment is forced into the model. Many real synth patches
+        have no decay; sustain begins at the attack-end inflection.
+      - Sustain end is detected too late because noise floor sustains the
+        envelope past the real signal's drop-off.
+      - Release length is consequently dominated by noise floor — values
+        come out 2-5× too long.
+
+    Use the result for debugging / scaffolding only. Real ADSR estimation
+    needs noise-floor handling and inflection-based segmentation; planned
+    research follows prior work.
+
     Inputs:
       audio_path:  WAV file at jobs/<job>/stems/<preset>/<stem>.wav
       triage_path: triage.json from note_triage (containing CandidateClusters)
