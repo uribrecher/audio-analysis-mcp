@@ -103,6 +103,17 @@ class Workspace:
     def job_stems_dir(self, job_name: str, preset: str) -> Path:
         return self._ensure(f"jobs/{job_name}/stems/{preset}")
 
+    def job_stem_file(self, job_name: str, preset: str, stem: str) -> Path:
+        """Path to a single stem WAV (e.g. bass.wav) inside a job. The parent
+        directory is created if missing; the file itself is not."""
+        return self.job_stems_dir(job_name, preset) / f"{stem}.wav"
+
+    def job_notes_file(self, job_name: str) -> Path:
+        """Convention: `jobs/<job>/notes.json`. Used by tests and ad-hoc tooling
+        that need a stable location to drop a NoteEvent JSON outside the
+        per-stem `transcriptions/` subtree (which is owned by note_transcribe)."""
+        return self.job_dir(job_name) / "notes.json"
+
     def job_transcriptions_dir(self, job_name: str, stem: str, preset: str) -> Path:
         return self._ensure(f"jobs/{job_name}/transcriptions/{stem}_{preset}")
 
@@ -111,3 +122,6 @@ class Workspace:
 
     def job_isolated_notes_dir(self, job_name: str, stem: str, preset: str) -> Path:
         return self._ensure(f"jobs/{job_name}/isolated_notes/{stem}_{preset}")
+
+    def job_amplitude_dir(self, job_name: str, stem: str, preset: str) -> Path:
+        return self._ensure(f"jobs/{job_name}/amplitude/{stem}_{preset}")

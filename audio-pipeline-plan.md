@@ -33,15 +33,20 @@ audio-analysis-mcp/
         audio_compare.py               # Mel spectrogram + CLAP embedding comparison
         audio_render.py                # Capture audio from system device
         note_transcribe.py             # Polyphonic transcription via Basic Pitch
-        note_triage.py                 # Candidate selection from transcription
+        note_triage.py                 # 3-pass cluster/score/select from transcription
         note_isolate.py                # Time-frequency box isolation
+        amplitude_analyze.py           # Per-cluster ADSR analysis with cross-candidate consensus
       analysis/
         __init__.py
         spectral.py                    # Librosa-based feature extraction + mel spectrogram
         comparison.py                  # Mel spectrogram diff + CLAP embedding similarity
         transcription.py               # Basic Pitch integration
-        note_triage.py                 # Polyphony profiling + candidate selection
+        note_triage.py                 # 3-pass clustering (chord/arpeggio/single) + scoring
         note_isolation.py              # Time-frequency masking
+        envelope.py                    # RMS sliding-window envelope extractor
+        adsr_fit.py                    # Heuristic four-segment ADSR fit
+        sustain_isolation.py           # Trim audio to sustained region
+        amplitude.py                   # Amplitude orchestrator (per-cluster envelope→fit→isolate→consensus)
       audio/
         __init__.py
         capture.py                     # sounddevice recording
