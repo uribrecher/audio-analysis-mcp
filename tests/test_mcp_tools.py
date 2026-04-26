@@ -98,6 +98,63 @@ def test_note_transcribe_e2e(mock_predict: MagicMock, sine_440_wav: Path, tmp_pa
     assert "test-song/transcriptions/bass_fast" in result["midi_path"]
 
 
+def test_note_triage_returns_clusters(sine_440_wav: Path, tmp_path: Path):
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    # Set up a job folder with a stem file
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.0, end_time=0.3, pitch_midi=60, amplitude=0.5, pitch_bends=None),
+        NoteEvent(start_time=2.0, end_time=4.0, pitch_midi=64, amplitude=0.9, pitch_bends=None),
+        NoteEvent(start_time=6.0, end_time=7.0, pitch_midi=67, amplitude=0.6, pitch_bends=None),
+        NoteEvent(start_time=6.0, end_time=7.0, pitch_midi=71, amplitude=0.6, pitch_bends=None),
+    ]
+    notes_path = stem_dir.parent.parent.parent / "notes.json"
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    result = json.loads(note_triage(audio_path=str(stem_file), notes_path=str(notes_path)))
+    assert result["candidate_count"] >= 1
+
+    top = result["top_candidates"][0]
+    # Cluster shape:
+    assert top["kind"] in ("single", "chord")
+    assert "score" in top
+    assert "members" in top and len(top["members"]) >= 1
+    # The long high-velocity single (pitch 64) should rank highly:
+    pitches = [m["note"]["pitch_midi"] for c in result["top_candidates"] for m in c["members"]]
+    assert 64 in pitches
+
+
+def test_note_triage_respects_time_window(sine_440_wav: Path, tmp_path: Path):
+    from audio_analysis_mcp.tools.note_triage import note_triage
+    from audio_analysis_mcp.schemas import NoteEvent
+
+    stem_dir = tmp_path / "workspace" / "jobs" / "test-song" / "stems" / "fast"
+    stem_dir.mkdir(parents=True)
+    stem_file = stem_dir / "bass.wav"
+    shutil.copy(sine_440_wav, stem_file)
+
+    notes = [
+        NoteEvent(start_time=0.0, end_time=1.0, pitch_midi=60, amplitude=0.8, pitch_bends=None),
+        NoteEvent(start_time=5.0, end_time=6.0, pitch_midi=64, amplitude=0.8, pitch_bends=None),
+        NoteEvent(start_time=10.0, end_time=11.0, pitch_midi=67, amplitude=0.8, pitch_bends=None),
+    ]
+    notes_path = stem_dir.parent.parent.parent / "notes.json"
+    notes_path.write_text(json.dumps([n.model_dump() for n in notes]))
+
+    result = json.loads(note_triage(
+        audio_path=str(stem_file), notes_path=str(notes_path),
+        start_time=4.0, end_time=8.0,
+    ))
+    assert result["candidate_count"] == 1
+    assert result["top_candidates"][0]["members"][0]["note"]["pitch_midi"] == 64
+
+
 def test_note_isolate_e2e(sine_440_wav: Path, tmp_path: Path):
     from audio_analysis_mcp.tools.note_isolate import note_isolate
 
