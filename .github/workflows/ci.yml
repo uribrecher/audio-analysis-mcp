@@ -7,6 +7,14 @@ on:
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
+    env:
+      # tone_generation tests load subtractive.schema.json. The canonical
+      # source lives in the sibling reverse-synth-research repo (private),
+      # so for CI we point the loader at a vendored snapshot under
+      # schemas/. See schemas/README.md for the sync process. Locally, the
+      # loader defaults to the sibling-repo path, so dev workflow is
+      # unchanged.
+      TONE_GEN_SCHEMA_DIR: ${{ github.workspace }}/schemas
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

@@ -95,7 +95,17 @@ def render_chord(
 
     graph: Any = None
     try:
-        graph = sf_lib.AudioGraph(output_device=None, start=False)
+        # backend_name="null" forces miniaudio to use its NULL playback device,
+        # bypassing CoreAudio / ALSA / PulseAudio device enumeration. This is
+        # what makes the renderer work on headless CI runners (ubuntu-latest)
+        # that have no real audio backend installed — passing output_device=None
+        # alone is not enough; the graph still probes the host's default audio
+        # backend and segfaults inside render_to_new_buffer when that backend
+        # cannot enumerate any device. Verified empirically by
+        # scratch/explore_signalflow_audio_backend.py.
+        cfg = sf_lib.AudioGraphConfig()
+        cfg.backend_name = "null"
+        graph = sf_lib.AudioGraph(config=cfg, start=False)
         voices = [
             _build_voice(
                 shape=shape,
