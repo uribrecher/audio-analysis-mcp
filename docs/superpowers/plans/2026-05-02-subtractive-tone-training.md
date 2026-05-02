@@ -123,7 +123,8 @@ def render_voice(
     sr: int,
 ) -> np.ndarray:
     osc = osc_class(frequency=frequency)
-    env = sf_lib.ADSREnvelope(attack=0.05, decay=0.10, sustain=0.7, release=0.10)
+    # gate=1 required: SignalFlow 0.5.3 ADSREnvelope defaults gate=0 → silence.
+    env = sf_lib.ADSREnvelope(attack=0.05, decay=0.10, sustain=0.7, release=0.10, gate=1)
     # Try common LP names; fall back as needed.
     lp_class_name = None
     for candidate in ("SVFilter", "OnePoleLowPassFilter", "LowPassFilter"):
@@ -176,7 +177,7 @@ def main() -> None:
     voices = []
     for f in (440.0, 554.37, 659.26):
         osc = SawOsc(frequency=f)
-        env = sf_lib.ADSREnvelope(attack=0.05, decay=0.10, sustain=0.7, release=0.10)
+        env = sf_lib.ADSREnvelope(attack=0.05, decay=0.10, sustain=0.7, release=0.10, gate=1)
         # Skip filter for the sum test to isolate the chord-summation behavior.
         voices.append(osc * env)
     summed = voices[0] + voices[1] + voices[2]
@@ -885,11 +886,15 @@ def _build_voice(
         filtered = lp_class(osc, "low_pass", cutoff_hz, resonance)
     else:
         filtered = lp_class(osc, cutoff_hz)
+    # gate=1 is REQUIRED on every ADSREnvelope: SignalFlow 0.5.3's default is
+    # gate=0, which produces silence. Verified empirically by
+    # scratch/explore_subtractive_renderer.py test case 3.
     env = sf_lib.ADSREnvelope(
         attack=amp_adsr["attack_ms"] / 1000.0,
         decay=amp_adsr["decay_ms"] / 1000.0,
         sustain=amp_adsr["sustain"],
         release=amp_adsr["release_ms"] / 1000.0,
+        gate=1,
     )
     return filtered * env
 
