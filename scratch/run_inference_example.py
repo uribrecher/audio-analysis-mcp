@@ -31,6 +31,9 @@ import soundfile as sf
 import torch
 
 from audio_analysis_mcp.research.tone_generation.dataset import (
+    _PITCH_WINDOW,
+    _SLICE_DURATION_S,
+    _SLICE_OFFSET_S,
     _audio_to_mel,
     _pitch_multihot,
 )
@@ -47,6 +50,8 @@ from audio_analysis_mcp.research.tone_generation.schema_io import (
 _DEFAULT_CHECKPOINT = Path(__file__).resolve().parents[1] / "scratch" / "tone_gen_checkpoints" / "checkpoint.pt"
 _SAMPLE_RATE = 44_100
 _TOTAL_DURATION_S = 1.2
+# Required minimum: 100ms attack-skip + 300ms sustain slice = 0.40s.
+_MIN_DURATION_S = _SLICE_OFFSET_S + _SLICE_DURATION_S
 
 # Synthetic test-mode defaults: a known C-major triad with definite synth params.
 _TEST_PITCHES = [60, 64, 67]  # C4, E4, G4
@@ -71,6 +76,12 @@ def _load_audio(wav_path: Path) -> np.ndarray:
         audio = audio.mean(axis=1)
     if sr != _SAMPLE_RATE:
         raise SystemExit(f"sample rate must be {_SAMPLE_RATE}, got {sr} ({wav_path})")
+    if len(audio) < int(_MIN_DURATION_S * _SAMPLE_RATE):
+        raise SystemExit(
+            f"audio too short: {len(audio) / _SAMPLE_RATE:.2f}s; "
+            f"need at least {_MIN_DURATION_S}s (100ms attack-skip + 300ms sustain slice). "
+            f"Note-on must be aligned to t=0 in the file."
+        )
     return audio.astype(np.float32, copy=False)
 
 
@@ -135,6 +146,14 @@ def main() -> None:
         for p in args.midi_pitches:
             if not (36 <= p <= 84):
                 raise SystemExit(f"pitch {p} outside trained range [36, 84]")
+        if len(args.midi_pitches) > 1:
+            if len(set(args.midi_pitches)) != len(args.midi_pitches):
+                raise SystemExit(f"MIDI pitches must be distinct: {args.midi_pitches}")
+            if max(args.midi_pitches) - min(args.midi_pitches) > _PITCH_WINDOW:
+                raise SystemExit(
+                    f"MIDI pitches span {max(args.midi_pitches) - min(args.midi_pitches)} semitones; "
+                    f"training distribution caps multi-voice chords at {_PITCH_WINDOW} semitones"
+                )
         audio = _load_audio(args.wav)
         midi_pitches = list(args.midi_pitches)
         ground_truth = None
@@ -143,7 +162,12 @@ def main() -> None:
     print(f"device: {device}")
 
     model = ToneGenerationCNN().to(device)
-    model.load_state_dict(torch.load(args.checkpoint, map_location=device))
+    try:
+        state_dict = torch.load(args.checkpoint, map_location=device, weights_only=True)
+    except Exception as exc:  # noqa: BLE001 — fallback path for legacy/custom-class checkpoints
+        print(f"warning: torch.load(weights_only=True) failed ({exc!r}); falling back to weights_only=False")
+        state_dict = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    model.load_state_dict(state_dict)
     model.eval()
 
     mel = _audio_to_mel(audio, _SAMPLE_RATE).unsqueeze(0).to(device)
