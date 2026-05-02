@@ -70,6 +70,11 @@ def _load_validator() -> Any:
             f"subtractive.schema.json not found at {subtractive_path} — "
             "set TONE_GEN_SCHEMA_DIR if your monorepo layout differs."
         )
+    if not base_path.exists():
+        raise FileNotFoundError(
+            f"synth-base.schema.json not found at {base_path} — "
+            "set TONE_GEN_SCHEMA_DIR if your monorepo layout differs."
+        )
     with subtractive_path.open() as f:
         subtractive_schema = json.load(f)
     with base_path.open() as f:
