@@ -34,13 +34,23 @@ _PITCH_HI = 84
 _PITCH_WINDOW = 12  # max semitone span across voices in one render
 
 
-@dataclass(frozen=True)
+@dataclass
 class DatasetItem:
-    """One synthetic training sample's full label."""
+    """One synthetic training sample's full label.
+
+    Treat as immutable after construction. Not hashable (contains dict/list fields).
+    """
 
     params_canonical: dict[str, Any]
     midi_pitches: list[int]
     n_voices: int
+
+
+def _next_pow2(n: int) -> int:
+    """Next power of 2 >= n. Returns 1 for n <= 1."""
+    if n <= 1:
+        return 1
+    return 1 << (n - 1).bit_length()
 
 
 def _sample_chord_pitches(rng: random.Random, n_voices: int) -> list[int]:
@@ -56,9 +66,14 @@ def _sample_chord_pitches(rng: random.Random, n_voices: int) -> list[int]:
 
 
 def sample_dataset_config(*, n_samples: int, seed: int) -> Iterator[DatasetItem]:
-    """Yield n_samples DatasetItem instances. Deterministic given seed."""
+    """Yield n_samples DatasetItem instances. Same-process deterministic given seed.
+
+    Cross-version determinism (across Python/scipy versions) is not guaranteed.
+    For published-dataset reproducibility, store a fixture mapping seed -> expected items.
+    """
+    n_pow2 = _next_pow2(n_samples)
     sobol = qmc.Sobol(d=2, scramble=True, seed=seed)
-    cont_samples = sobol.random(n_samples)  # shape (n_samples, 2) — uniform [0, 1)
+    cont_samples = sobol.random(n_pow2)[:n_samples]  # slice to requested n
     rng = random.Random(seed)
     for i in range(n_samples):
         cutoff_norm, resonance = cont_samples[i]
