@@ -9,5 +9,9 @@ test_data/
 .claude/
 .DS_Store
 
+# Tone-generation training (default output paths — datasets and checkpoints are large)
+scratch/tone_gen_dataset/
+scratch/tone_gen_checkpoints/
+
 # IDE
 .idea/

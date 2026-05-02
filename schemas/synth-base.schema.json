@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reverse-synth-research.local/parameter-mapping/synth-base.schema.json",
+  "title": "Synth Canonical Parameters — Engine-Agnostic Base",
+  "description": "Engine-agnostic base schema for canonical synth parameters. Defines the top-level wrapper (schema_version + engine + params) and reusable $defs (ADSR, Voice, Master, Envelopes-with-amp-required) that every engine-specific schema extends via allOf. Engine schemas (subtractive, FM, organ, wavetable, sample-based, additive, granular) constrain `engine` to a const value, attach a `params` $ref to their engine-specific shape, and add engine-specific $defs (oscillators, filters, LFO destination vocabulary, etc.). Schema version 0.1 — design-reviewed only, no fixtures yet.",
+  "type": "object",
+  "required": ["schema_version", "engine", "params"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "engine": { "type": "string", "description": "Engine identifier. Engine-specific schemas constrain this to a const value (e.g. \"subtractive\")." },
+    "params": { "$ref": "#/$defs/CommonParams" }
+  },
+  "$defs": {
+    "ADSR": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attack_ms", "decay_ms", "sustain", "release_ms"],
+      "description": "Attack-Decay-Sustain-Release envelope shape. Reusable across amplitude, filter, modulation, and engine-specific envelopes (operator envelopes for FM, etc.).",
+      "properties": {
+        "attack_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000,
+          "x-unit": "ms"
+        },
+        "decay_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 20000,
+          "x-unit": "ms"
+        },
+        "sustain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "x-unit": "ratio",
+          "description": "Sustain level as a ratio of peak."
+        },
+        "release_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 20000,
+          "x-unit": "ms"
+        }
+      }
+    },
+    "Voice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "description": "Voice-allocation policy. Generic across engines. Engine-specific extra modes (CHORD, ARP-LATCH on Korg products, etc.) are out-of-common-core.",
+      "properties": {
+        "glide_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5000,
+          "x-unit": "ms"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["mono", "poly", "unison"]
+        },
+        "unison_voices": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Active voices in unison mode. Ignored when mode != 'unison'."
+        }
+      }
+    },
+    "Master": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["volume_db"],
+      "description": "Output stage. Generic across engines. Optional at the params level — some devices expose master volume only as a non-programmable physical pot.",
+      "properties": {
+        "volume_db": {
+          "type": "number",
+          "minimum": -60,
+          "maximum": 6,
+          "x-unit": "dB"
+        }
+      }
+    },
+    "Envelopes": {
+      "type": "object",
+      "required": ["amp"],
+      "description": "Envelopes container. Base requires only `amp` (every engine has an amplitude envelope). Engine schemas extend this via allOf to add engine-specific envelopes (subtractive adds `filter`; FM would add per-operator envelopes, etc.). No `additionalProperties` constraint here so extensions can add named envelope slots; the engine-specific extension applies `unevaluatedProperties: false`.",
+      "properties": {
+        "amp": { "$ref": "#/$defs/ADSR" }
+      }
+    },
+    "CommonParams": {
+      "type": "object",
+      "required": ["envelope", "voice"],
+      "description": "Engine-agnostic params container. Engine-specific schemas extend this via allOf and add their own properties (oscillators, filters, LFO, etc.). No `additionalProperties` constraint here so extensions are unblocked; the engine-specific extension applies `unevaluatedProperties: false`. `master` is optional because some devices (PolyBrute 12, Minilogue XD) expose master volume only as a non-programmable physical pot and cannot represent a `master.volume_db` value.",
+      "properties": {
+        "envelope": { "$ref": "#/$defs/Envelopes" },
+        "voice": { "$ref": "#/$defs/Voice" },
+        "master": { "$ref": "#/$defs/Master" }
+      }
+    }
+  }
+}
