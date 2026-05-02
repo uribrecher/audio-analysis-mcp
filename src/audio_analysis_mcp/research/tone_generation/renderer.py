@@ -12,8 +12,6 @@ import numpy as np
 import numpy.typing as npt
 import signalflow as sf_lib
 
-from audio_analysis_mcp.research.tone_generation.schema_io import BASELINE_AMP_ADSR
-
 _SHAPE_TO_OSC_CLASS: dict[str, str] = {
     "sine": "SineOscillator",
     "saw": "SawOscillator",
@@ -43,15 +41,13 @@ def _build_voice(
         )
     osc_class = getattr(sf_lib, osc_class_name)
     osc = osc_class(frequency=_midi_to_hz(midi_pitch))
-    lp_class = getattr(sf_lib, "SVFilter", None) or getattr(
-        sf_lib, "OnePoleLowPassFilter"
-    )
+    if not hasattr(sf_lib, "SVFilter"):
+        raise RuntimeError(
+            "signalflow has no SVFilter; "
+            "scratch/explore_subtractive_renderer.py needs re-running"
+        )
     # SignalFlow's SVFilter ctor: SVFilter(input, filter_type, cutoff, resonance).
-    # Fall back to OnePoleLowPassFilter(input, cutoff) if SVFilter is unavailable.
-    if hasattr(sf_lib, "SVFilter"):
-        filtered = lp_class(osc, "low_pass", cutoff_hz, resonance)
-    else:
-        filtered = lp_class(osc, cutoff_hz)
+    filtered = sf_lib.SVFilter(osc, "low_pass", cutoff_hz, resonance)
     # gate=1 is REQUIRED on every ADSREnvelope: SignalFlow 0.5.3's default is
     # gate=0, which produces silence. Verified empirically by
     # scratch/explore_subtractive_renderer.py test case 3.
@@ -97,8 +93,9 @@ def render_chord(
     resonance = float(p["filter"]["lp"]["resonance"])
     amp_adsr = p["envelope"]["amp"]
 
-    graph = sf_lib.AudioGraph(output_device=None, start=False)
+    graph: Any = None
     try:
+        graph = sf_lib.AudioGraph(output_device=None, start=False)
         voices = [
             _build_voice(
                 shape=shape,
@@ -127,9 +124,5 @@ def render_chord(
     finally:
         # Tear down the global singleton so the next render_chord call gets a
         # fresh graph instead of silently reusing this one.
-        graph.destroy()
-
-
-# Touch BASELINE_AMP_ADSR so import isn't dead - also provides a quick reference
-# for callers that want to use the canonical baseline in a custom render.
-_ = BASELINE_AMP_ADSR
+        if graph is not None:
+            graph.destroy()
