@@ -136,7 +136,7 @@ def _compute_eval(
     denom = max(n, 1)
     return {
         "shape_accuracy": correct_shape / denom,
-        "cutoff_log_mse": cutoff_se / denom,
+        "cutoff_norm_mse": cutoff_se / denom,
         "resonance_mse": res_se / denom,
         "schema_validation_failures": failures,
         "n_samples": n,
@@ -224,13 +224,13 @@ def main() -> None:
         )
         val_loss = (
             (1.0 - val_metrics["shape_accuracy"])
-            + val_metrics["cutoff_log_mse"]
+            + val_metrics["cutoff_norm_mse"]
             + val_metrics["resonance_mse"]
         )
         print(
             f"epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
             f"shape_acc={val_metrics['shape_accuracy']:.3f} "
-            f"cutoff_mse={val_metrics['cutoff_log_mse']:.4f} "
+            f"cutoff_mse={val_metrics['cutoff_norm_mse']:.4f} "
             f"res_mse={val_metrics['resonance_mse']:.4f}"
         )
 

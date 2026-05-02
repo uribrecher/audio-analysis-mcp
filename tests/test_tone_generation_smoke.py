@@ -68,6 +68,6 @@ def test_train_smoke(tmp_path: Path) -> None:
     assert eval_path.exists()
     report = json.loads(eval_path.read_text())
     assert "shape_accuracy" in report
-    assert "cutoff_log_mse" in report
+    assert "cutoff_norm_mse" in report
     assert "resonance_mse" in report
     assert report["schema_validation_failures"] == 0
