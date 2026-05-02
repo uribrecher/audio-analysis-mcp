@@ -176,6 +176,7 @@ class ToneGenerationDataset(Dataset[tuple[torch.Tensor, torch.Tensor, dict[str, 
         with manifest_path.open() as f:
             self.manifest: dict[str, Any] = json.load(f)
         self.sample_rate: int = int(self.manifest["sample_rate"])
+        self.total_duration_s: float = float(self.manifest["total_duration_s"])
         self.samples_dir = self.root / "samples"
         with labels_path.open() as f:
             self.labels: list[dict[str, Any]] = [json.loads(line) for line in f if line.strip()]

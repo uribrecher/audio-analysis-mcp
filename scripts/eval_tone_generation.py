@@ -24,7 +24,7 @@ import torch
 # on sys.path. The `audio_analysis_mcp` package is editable-installed.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _eval_helpers import compute_full_eval  # noqa: E402
+from _eval_helpers import _split_indices, compute_full_eval  # noqa: E402
 
 from audio_analysis_mcp.research.tone_generation.dataset import (  # noqa: E402
     ToneGenerationDataset,
@@ -32,22 +32,6 @@ from audio_analysis_mcp.research.tone_generation.dataset import (  # noqa: E402
 from audio_analysis_mcp.research.tone_generation.model import (  # noqa: E402
     ToneGenerationCNN,
 )
-
-
-def _split_indices(n: int) -> tuple[list[int], list[int], list[int]]:
-    """Modulo-10 deterministic split — must match train_tone_generation.py."""
-    train: list[int] = []
-    val: list[int] = []
-    test: list[int] = []
-    for i in range(n):
-        bucket = i % 10
-        if bucket < 8:
-            train.append(i)
-        elif bucket == 8:
-            val.append(i)
-        else:
-            test.append(i)
-    return train, val, test
 
 
 def _select_device() -> torch.device:

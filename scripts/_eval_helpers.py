@@ -90,6 +90,27 @@ def _round_trip_mel_cosine(
     )
 
 
+def _split_indices(n: int) -> tuple[list[int], list[int], list[int]]:
+    """Modulo-10 deterministic split: train if i%10 < 8, val if ==8, test if ==9.
+
+    Shared by `train_tone_generation.py` (split for train/val/test) and
+    `eval_tone_generation.py` (recover the test bucket from a saved checkpoint).
+    Keep the two consumers in lockstep — if this changes, both shift together.
+    """
+    train: list[int] = []
+    val: list[int] = []
+    test: list[int] = []
+    for i in range(n):
+        bucket = i % 10
+        if bucket < 8:
+            train.append(i)
+        elif bucket == 8:
+            val.append(i)
+        else:
+            test.append(i)
+    return train, val, test
+
+
 def compute_full_eval(
     model: torch.nn.Module,
     dataset: ToneGenerationDataset,
@@ -104,6 +125,19 @@ def compute_full_eval(
     cosine (mean + median). Each test-time prediction triggers a SignalFlow
     render — keep eval sets bounded.
     """
+    # Guard against manifest-rate drift: the round-trip render and mel
+    # extraction below use the module-level _SAMPLE_RATE / _TOTAL_DURATION_S,
+    # so a regenerated dataset with different rate/duration would silently
+    # produce a meaningless cosine. Fail loud instead.
+    assert dataset.sample_rate == _SAMPLE_RATE, (
+        f"dataset.sample_rate={dataset.sample_rate} != _SAMPLE_RATE={_SAMPLE_RATE}; "
+        "regenerate dataset or update _eval_helpers constants"
+    )
+    assert dataset.total_duration_s == _TOTAL_DURATION_S, (
+        f"dataset.total_duration_s={dataset.total_duration_s} != "
+        f"_TOTAL_DURATION_S={_TOTAL_DURATION_S}; "
+        "regenerate dataset or update _eval_helpers constants"
+    )
     model.eval()
     loader: DataLoader[Any] = DataLoader(
         Subset(dataset, indices),
