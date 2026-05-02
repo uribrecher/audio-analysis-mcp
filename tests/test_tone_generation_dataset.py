@@ -1,6 +1,11 @@
+import json
 import math
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
+import soundfile as sf
 
 from audio_analysis_mcp.research.tone_generation.dataset import (
     DatasetItem,
@@ -68,3 +73,32 @@ def test_sample_dataset_config_cutoff_log_distributed():
     log_mean = sum(math.log(c) for c in cutoffs) / len(cutoffs)
     log_midpoint = (math.log(50.0) + math.log(10_000.0)) / 2.0
     assert abs(log_mean - log_midpoint) < 0.5, "cutoff is not log-distributed"
+
+
+@pytest.mark.slow
+def test_generate_dataset_script_smoke(tmp_path: Path):
+    out_dir = tmp_path / "ds"
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "scripts" / "generate_subtractive_dataset.py"
+    res = subprocess.run(
+        [sys.executable, str(script),
+         "--n-samples", "5", "--seed", "0", "--out-dir", str(out_dir)],
+        check=True, capture_output=True, text=True,
+    )
+    print(res.stdout)
+    assert (out_dir / "manifest.json").exists()
+    assert (out_dir / "labels.jsonl").exists()
+    samples = sorted((out_dir / "samples").glob("*.wav"))
+    assert len(samples) == 5
+    # Confirm one wav decodes.
+    audio, sr = sf.read(str(samples[0]))
+    assert sr == 44100
+    assert audio.size > 0
+    # Confirm labels.jsonl line count matches.
+    lines = (out_dir / "labels.jsonl").read_text().strip().splitlines()
+    assert len(lines) == 5
+    # Manifest shape.
+    manifest = json.loads((out_dir / "manifest.json").read_text())
+    assert manifest["n_samples"] == 5
+    assert manifest["schema_version"] == "0.1"
+    assert manifest["sample_rate"] == 44100
