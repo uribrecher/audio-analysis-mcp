@@ -219,3 +219,22 @@ def test_tone_generation_dataset_pitch_multihot_correct(tmp_path: Path):
             )
         # Total ones equals number of distinct pitches.
         assert int(pitch_multihot.sum().item()) == len(set(pitches))
+
+
+def test_tone_generation_dataset_caches_mel(tmp_path: Path):
+    ds_dir = _build_mini_dataset(tmp_path, n=2)
+    ds = ToneGenerationDataset(ds_dir)
+    # First access populates cache.
+    mel1, pitch1, _ = ds[0]
+    assert 0 in ds._cache  # type: ignore[attr-defined]
+    # Second access returns same tensor (cache hit).
+    mel2, _, _ = ds[0]
+    assert mel1 is mel2  # cache returns the same object
+
+
+def test_tone_generation_dataset_init_fails_on_missing_wav(tmp_path: Path):
+    ds_dir = _build_mini_dataset(tmp_path, n=2)
+    # Delete one WAV to simulate corrupt dataset.
+    (ds_dir / "samples" / "000001.wav").unlink()
+    with pytest.raises(FileNotFoundError):
+        ToneGenerationDataset(ds_dir)

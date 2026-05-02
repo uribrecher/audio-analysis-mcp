@@ -108,8 +108,11 @@ _PITCH_MULTIHOT_HI = 108
 _SLICE_OFFSET_S = 0.10
 _SLICE_DURATION_S = 0.30
 
-# Mel-spectrogram params. At sr=44.1k, hop=441 → 10ms frames → 30 frames per
-# 300ms slice. n_fft=2048 (~46ms window), win_length=1102 (~25ms).
+# Mel-spec params: load-bearing for the model. ToneGenerationCNN's bottleneck dim
+# is computed from (1, _MEL_N_MELS, ~30 frames). Changing these constants requires
+# updating model.py's bottleneck dim accordingly.
+# At sr=44.1k, hop=441 → 10ms frames → 30 frames per 300ms slice.
+# n_fft=2048 (~46ms window), win_length=1102 (~25ms).
 _MEL_N_MELS = 128
 _MEL_HOP_LENGTH = 441
 _MEL_WIN_LENGTH = 1102
@@ -120,8 +123,12 @@ def _pitch_multihot(midi_pitches: list[int]) -> torch.Tensor:
     """88-dim float32 multi-hot: 1.0 at index (pitch - 21) for each pitch."""
     vec = torch.zeros(_PITCH_MULTIHOT_HI - _PITCH_MULTIHOT_LO + 1, dtype=torch.float32)
     for p in midi_pitches:
-        if _PITCH_MULTIHOT_LO <= p <= _PITCH_MULTIHOT_HI:
-            vec[p - _PITCH_MULTIHOT_LO] = 1.0
+        if not (_PITCH_MULTIHOT_LO <= p <= _PITCH_MULTIHOT_HI):
+            raise ValueError(
+                f"MIDI pitch {p} outside 88-key range "
+                f"[{_PITCH_MULTIHOT_LO}, {_PITCH_MULTIHOT_HI}]"
+            )
+        vec[p - _PITCH_MULTIHOT_LO] = 1.0
     return vec
 
 
@@ -173,6 +180,22 @@ class ToneGenerationDataset(Dataset[tuple[torch.Tensor, torch.Tensor, dict[str, 
         with labels_path.open() as f:
             self.labels: list[dict[str, Any]] = [json.loads(line) for line in f if line.strip()]
 
+        # Verify every referenced WAV exists at init-time so dataset corruption
+        # surfaces immediately rather than mid-epoch. O(n) stat calls — cheap.
+        for label in self.labels:
+            wav_path = self.samples_dir / f"{int(label['idx']):06d}.wav"
+            if not wav_path.exists():
+                raise FileNotFoundError(
+                    f"WAV missing for label idx={label['idx']}: {wav_path}. "
+                    "Dataset is corrupt — re-run generate_subtractive_dataset.py."
+                )
+
+        # In-memory cache for (mel, pitch_multihot) per idx. Lazy-populated on
+        # first __getitem__ access. ~150 MB for a 10K dataset (128 * 30 * 4 B).
+        # The target dict is cheap dict construction, not cached — keeps memory
+        # predictable.
+        self._cache: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+
     def __len__(self) -> int:
         return len(self.labels)
 
@@ -180,18 +203,25 @@ class ToneGenerationDataset(Dataset[tuple[torch.Tensor, torch.Tensor, dict[str, 
         self, idx: int
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
         label = self.labels[idx]
-        wav_path = self.samples_dir / f"{int(label['idx']):06d}.wav"
-        audio, sr = sf.read(str(wav_path))
-        if sr != self.sample_rate:
-            raise ValueError(
-                f"sample rate mismatch for {wav_path}: file={sr}, manifest={self.sample_rate}"
-            )
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-        audio = np.asarray(audio, dtype=np.float32)
+        cached = self._cache.get(idx)
+        if cached is not None:
+            mel, pitch_multihot = cached
+        else:
+            wav_path = self.samples_dir / f"{int(label['idx']):06d}.wav"
+            audio, sr = sf.read(str(wav_path))
+            if sr != self.sample_rate:
+                raise ValueError(
+                    f"sample rate mismatch for {wav_path}: file={sr}, manifest={self.sample_rate}"
+                )
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            audio = np.asarray(audio, dtype=np.float32)
+            if not bool(np.isfinite(audio).all()):
+                raise ValueError(f"Non-finite samples in {wav_path}")
 
-        mel = _audio_to_mel(audio, self.sample_rate)
-        pitch_multihot = _pitch_multihot(list(label["midi_pitches"]))
+            mel = _audio_to_mel(audio, self.sample_rate)
+            pitch_multihot = _pitch_multihot(list(label["midi_pitches"]))
+            self._cache[idx] = (mel, pitch_multihot)
 
         params = label["params_canonical"]["params"]
         shape = params["osc"]["1"]["shape"]
