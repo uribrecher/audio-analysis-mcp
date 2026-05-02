@@ -15,6 +15,10 @@ dependencies = [
   "sounddevice>=0.4",
   "pydantic>=2.0",
   "basic-pitch>=0.4.0",
+  # signalflow ceiling: 0.5.4 ships no macOS wheel — revisit when upstream publishes one.
+  "signalflow>=0.4.0,<0.5.4",
+  "jsonschema>=4.21",
+  "referencing>=0.30",
 ]
 
 [dependency-groups]
@@ -46,5 +50,8 @@ module = [
   "tqdm.*",
   "basic_pitch.*",
   "pretty_midi.*",
+  "signalflow.*",
+  "jsonschema.*",
+  "referencing.*",
 ]
 ignore_missing_imports = true
