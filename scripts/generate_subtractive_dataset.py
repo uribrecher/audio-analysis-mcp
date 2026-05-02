@@ -14,14 +14,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
+import os
+import subprocess
 import time
 from pathlib import Path
 
 import soundfile as sf
-
-# Local repo imports — assume cwd = audio-analysis-mcp/ when running.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from audio_analysis_mcp.research.tone_generation.dataset import sample_dataset_config
 from audio_analysis_mcp.research.tone_generation.renderer import render_chord
@@ -32,12 +30,11 @@ TOTAL_DURATION_S = 1.2
 
 
 def _git_sha() -> str:
-    import subprocess
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True
         ).strip()
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return "unknown"
 
 
@@ -55,6 +52,7 @@ def main() -> None:
     manifest_path = out_dir / "manifest.json"
 
     t0 = time.time()
+    n_produced = 0
     with labels_path.open("w") as labels_f:
         for idx, item in enumerate(
             sample_dataset_config(n_samples=args.n_samples, seed=args.seed)
@@ -78,19 +76,24 @@ def main() -> None:
                 )
                 + "\n"
             )
+            labels_f.flush()
+            n_produced = idx + 1
             if (idx + 1) % 500 == 0:
                 rate = (idx + 1) / (time.time() - t0)
                 print(f"  rendered {idx + 1}/{args.n_samples} ({rate:.1f} samples/s)")
 
     manifest = {
         "n_samples": args.n_samples,
+        "n_samples_produced": n_produced,
         "seed": args.seed,
         "schema_version": "0.1",
         "sample_rate": SAMPLE_RATE,
         "total_duration_s": TOTAL_DURATION_S,
         "renderer_git_sha": _git_sha(),
     }
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    manifest_path_partial = manifest_path.with_suffix(".json.partial")
+    manifest_path_partial.write_text(json.dumps(manifest, indent=2) + "\n")
+    os.replace(manifest_path_partial, manifest_path)
     print(
         f"Done. {args.n_samples} samples → {out_dir} in {time.time() - t0:.1f}s."
     )
