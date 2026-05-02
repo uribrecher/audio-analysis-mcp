@@ -8,3 +8,6 @@ dist/
 test_data/
 .claude/
 .DS_Store
+
+# IDE
+.idea/
