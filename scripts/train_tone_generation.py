@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import random
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -27,17 +28,20 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 
-from audio_analysis_mcp.research.tone_generation.dataset import ToneGenerationDataset
-from audio_analysis_mcp.research.tone_generation.model import ToneGenerationCNN
-from audio_analysis_mcp.research.tone_generation.schema_io import (
-    denormalize_predictions,
-    validate_canonical,
+# Sibling-script import: `_eval_helpers.py` lives in the same scripts/ dir but
+# isn't a package member, so we have to put scripts/ on sys.path. The package
+# imports below DON'T need a sys.path hack — `audio_analysis_mcp` is installed
+# editable via `uv sync --dev` and resolved through site-packages.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _eval_helpers import _collate, compute_full_eval  # noqa: E402
+
+from audio_analysis_mcp.research.tone_generation.dataset import (  # noqa: E402
+    ToneGenerationDataset,
 )
-
-
-# Pitch multihot index 0 → MIDI 21 (A0), per dataset._PITCH_MULTIHOT_LO.
-_PITCH_MULTIHOT_LO = 21
-_PITCH_FALLBACK = 60  # middle C — used only if multihot somehow has zero pitches.
+from audio_analysis_mcp.research.tone_generation.model import (  # noqa: E402
+    ToneGenerationCNN,
+)
 
 
 def _split_indices(n: int) -> tuple[list[int], list[int], list[int]]:
@@ -62,85 +66,6 @@ def _select_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
-
-
-def _collate(
-    batch: list[tuple[torch.Tensor, torch.Tensor, dict[str, Any]]],
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Flatten Dataset's (mel, pitch, target_dict) tuples into a 5-tensor batch."""
-    mels = torch.stack([item[0] for item in batch])
-    pitches = torch.stack([item[1] for item in batch])
-    shape_label = torch.tensor(
-        [item[2]["shape_label"] for item in batch], dtype=torch.long
-    )
-    cutoff = torch.tensor(
-        [item[2]["cutoff_norm"] for item in batch], dtype=torch.float32
-    )
-    res = torch.tensor(
-        [item[2]["resonance"] for item in batch], dtype=torch.float32
-    )
-    return mels, pitches, shape_label, cutoff, res
-
-
-def _compute_eval(
-    model: ToneGenerationCNN,
-    loader: DataLoader[Any],
-    device: torch.device,
-    report_canonical_failures: bool = True,
-) -> dict[str, Any]:
-    """Per-param metrics; optionally validates each prediction's canonical instance."""
-    model.eval()
-    n = 0
-    correct_shape = 0
-    cutoff_se = 0.0
-    res_se = 0.0
-    failures = 0
-    with torch.no_grad():
-        for mels, pitches, shape_label, cutoff, res in loader:
-            mels = mels.to(device)
-            pitches = pitches.to(device)
-            shape_label = shape_label.to(device)
-            cutoff = cutoff.to(device)
-            res = res.to(device)
-            out = model(mels, pitches)
-            preds_shape = out["shape_logits"].argmax(dim=1)
-            correct_shape += int((preds_shape == shape_label).sum().item())
-            cutoff_se += float(
-                F.mse_loss(out["cutoff_norm"], cutoff, reduction="sum").item()
-            )
-            res_se += float(
-                F.mse_loss(out["resonance"], res, reduction="sum").item()
-            )
-            n += int(mels.size(0))
-            if report_canonical_failures:
-                for i in range(mels.size(0)):
-                    pitch_idxs = (
-                        (pitches[i] > 0.5)
-                        .nonzero(as_tuple=False)
-                        .squeeze(-1)
-                        .tolist()
-                    )
-                    midi_pitches = [_PITCH_MULTIHOT_LO + j for j in pitch_idxs] or [
-                        _PITCH_FALLBACK
-                    ]
-                    inst = denormalize_predictions(
-                        shape_label=int(preds_shape[i].item()),
-                        cutoff_norm=float(out["cutoff_norm"][i].item()),
-                        resonance=float(out["resonance"][i].item()),
-                        midi_pitches=midi_pitches,
-                    )
-                    try:
-                        validate_canonical(inst)
-                    except Exception:
-                        failures += 1
-    denom = max(n, 1)
-    return {
-        "shape_accuracy": correct_shape / denom,
-        "cutoff_norm_mse": cutoff_se / denom,
-        "resonance_mse": res_se / denom,
-        "schema_validation_failures": failures,
-        "n_samples": n,
-    }
 
 
 def main() -> None:
@@ -182,12 +107,8 @@ def main() -> None:
         shuffle=False,
         collate_fn=_collate,
     )
-    test_loader: DataLoader[Any] = DataLoader(
-        Subset(full, test_idx),
-        batch_size=args.batch_size,
-        shuffle=False,
-        collate_fn=_collate,
-    )
+    # No test_loader: the final eval uses `compute_full_eval(model, full,
+    # test_idx, ...)` which builds its own loader internally.
 
     model = ToneGenerationCNN().to(device)
     optim = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
@@ -219,19 +140,30 @@ def main() -> None:
             n_train += int(mels.size(0))
         train_loss /= max(n_train, 1)
 
-        val_metrics = _compute_eval(
-            model, val_loader, device, report_canonical_failures=False
-        )
-        val_loss = (
-            (1.0 - val_metrics["shape_accuracy"])
-            + val_metrics["cutoff_norm_mse"]
-            + val_metrics["resonance_mse"]
-        )
+        # Lightweight val-loss forward — same loss the train step minimizes.
+        # Skipping the full eval (round-trip render, schema validation) keeps
+        # epochs fast; full metrics run once at the end on the test set.
+        val_loss_total = 0.0
+        n_val = 0
+        model.eval()
+        with torch.no_grad():
+            for mels, pitches, shape_label, cutoff, res in val_loader:
+                mels = mels.to(device)
+                pitches = pitches.to(device)
+                shape_label = shape_label.to(device)
+                cutoff = cutoff.to(device)
+                res = res.to(device)
+                out = model(mels, pitches)
+                loss = (
+                    F.cross_entropy(out["shape_logits"], shape_label)
+                    + F.mse_loss(out["cutoff_norm"], cutoff)
+                    + F.mse_loss(out["resonance"], res)
+                )
+                val_loss_total += float(loss.item()) * int(mels.size(0))
+                n_val += int(mels.size(0))
+        val_loss = val_loss_total / max(n_val, 1)
         print(
-            f"epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"shape_acc={val_metrics['shape_accuracy']:.3f} "
-            f"cutoff_mse={val_metrics['cutoff_norm_mse']:.4f} "
-            f"res_mse={val_metrics['resonance_mse']:.4f}"
+            f"epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f}"
         )
 
         if val_loss < best_val - 1e-4:
@@ -250,9 +182,13 @@ def main() -> None:
     if not args.checkpoint_out.exists():
         torch.save(model.state_dict(), args.checkpoint_out)
 
-    # Final eval on test set with the best checkpoint.
+    # Final eval on test set with the best checkpoint. Uses the shared helper,
+    # which adds round-trip mel cosine + 4x4 confusion matrix on top of the
+    # per-param metrics + schema validation that the per-epoch loop tracked.
     model.load_state_dict(torch.load(args.checkpoint_out, map_location=device))
-    test_metrics = _compute_eval(model, test_loader, device)
+    test_metrics = compute_full_eval(
+        model, full, test_idx, device, batch_size=args.batch_size
+    )
     eval_report_path = args.checkpoint_out.parent / "eval_report.json"
     eval_report_path.write_text(json.dumps(test_metrics, indent=2) + "\n")
     print(f"\ntest metrics:\n{json.dumps(test_metrics, indent=2)}")
