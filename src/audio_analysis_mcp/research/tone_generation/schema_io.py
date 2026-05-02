@@ -192,6 +192,12 @@ def denormalize_predictions(
     contract but does not affect the canonical instance — pitch lives in the
     rendering driver, not in the canonical params.
     """
+    if not 0 <= shape_label < len(SHAPE_LABELS):
+        raise ValueError(
+            f"shape_label {shape_label} outside valid range "
+            f"[0, {len(SHAPE_LABELS) - 1}]; "
+            f"valid labels: {list(enumerate(SHAPE_LABELS))}"
+        )
     cutoff_norm = max(0.0, min(1.0, cutoff_norm))
     resonance = max(0.0, min(1.0, resonance))
     shape = SHAPE_LABELS[shape_label]

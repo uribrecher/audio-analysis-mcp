@@ -3,7 +3,7 @@
 Synthetic dataset generation, supervised CNN training, and re-eval for the
 subtractive synth engine. Predicts three per-sample parameters from audio:
 
-- `osc.1.shape` (5-class softmax: saw / square / triangle / sine / pulse)
+- `osc.1.shape` (4-class softmax: sine / saw / square / triangle — `pulse` is deliberately excluded; see backlog)
 - `filter.lp.cutoff_hz` (regression in log-Hz, denormalized to canonical Hz)
 - `filter.lp.resonance` (regression in [0, 1])
 
@@ -30,7 +30,9 @@ Writes:
 
 - `scratch/tone_gen_dataset/samples/{idx:06d}.wav` — 16-bit PCM, 44.1 kHz mono, 1.2 s.
 - `scratch/tone_gen_dataset/labels.jsonl` — one JSON object per sample with
-  `params_canonical`, `midi_pitches`, `n_voices`, `audio_path`.
+  `idx`, `params_canonical`, `midi_pitches`, `n_voices`. The audio file for
+  each row is at `samples/{idx:06d}.wav` (derived from `idx`, not stored in
+  the row).
 - `scratch/tone_gen_dataset/manifest.json` — dataset-level metadata
   (n_samples, seed, sample_rate, duration, git SHA, timestamps).
 

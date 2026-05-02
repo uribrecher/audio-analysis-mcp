@@ -103,8 +103,18 @@ def render_chord(
         # backend and segfaults inside render_to_new_buffer when that backend
         # cannot enumerate any device. Verified empirically by
         # scratch/explore_signalflow_audio_backend.py.
+        #
+        # cfg.sample_rate propagates into miniaudio so the graph actually
+        # renders at the requested rate (otherwise oscillator frequencies
+        # would be interpreted at SignalFlow's default 44_100 Hz and the
+        # buffer length we pass via num_frames would be inconsistent with
+        # actual wall-clock duration). Verified empirically by
+        # scratch/explore_signalflow_sample_rate.py: 1s of 1kHz sine
+        # rendered at 22_050 / 44_100 / 88_200 all produce ~2000 zero
+        # crossings with the matching buffer length.
         cfg = sf_lib.AudioGraphConfig()
         cfg.backend_name = "null"
+        cfg.sample_rate = sample_rate
         graph = sf_lib.AudioGraph(config=cfg, start=False)
         voices = [
             _build_voice(

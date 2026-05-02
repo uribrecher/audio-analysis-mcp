@@ -79,6 +79,18 @@ def test_denormalize_returns_canonical_instance():
     )
 
 
+@pytest.mark.parametrize("bad_label", [-1, len(SHAPE_LABELS), len(SHAPE_LABELS) + 5])
+def test_denormalize_predictions_rejects_out_of_range_shape_label(bad_label):
+    """shape_label outside [0, len(SHAPE_LABELS)) must raise ValueError, not IndexError."""
+    with pytest.raises(ValueError, match="outside valid range"):
+        denormalize_predictions(
+            shape_label=bad_label,
+            cutoff_norm=0.5,
+            resonance=0.5,
+            midi_pitches=[60],
+        )
+
+
 def test_normalize_then_denormalize_roundtrip_continuous():
     out = normalize_params(shape="square", cutoff_hz=2000.0, resonance=0.6)
     inst = denormalize_predictions(
