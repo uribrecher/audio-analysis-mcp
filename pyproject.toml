@@ -15,6 +15,8 @@ dependencies = [
   "sounddevice>=0.4",
   "pydantic>=2.0",
   "basic-pitch>=0.4.0",
+  "signalflow>=0.4.0,<0.5.4",
+  "jsonschema>=4.21",
 ]
 
 [dependency-groups]
@@ -46,5 +48,7 @@ module = [
   "tqdm.*",
   "basic_pitch.*",
   "pretty_midi.*",
+  "signalflow.*",
+  "jsonschema.*",
 ]
 ignore_missing_imports = true
