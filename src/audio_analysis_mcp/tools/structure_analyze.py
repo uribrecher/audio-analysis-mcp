@@ -11,7 +11,7 @@ def structure_analyze(audio_path: str) -> str:
     """
     ws = get_workspace()
     ctx = resolve_job_context(audio_path, ws)
-    output_dir = str(ws.job_structure_dir(ctx.job_name))
+    output_dir = str(ws.job_song_structure_dir(ctx.job_name))
     pipeline = get_structure_pipeline()
     result = analyze_structure(
         audio_path=audio_path,

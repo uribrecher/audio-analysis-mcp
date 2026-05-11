@@ -7,8 +7,19 @@ from typing import Protocol
 from audio_analysis_mcp.schemas import StructureAnalyzeResult, StructureSegment
 
 
+class _SegmentLike(Protocol):
+    start: float
+    end: float
+    label: str
+
+
+class _AnalysisResultLike(Protocol):
+    segments: list[_SegmentLike]
+    duration: float
+
+
 class _Pipeline(Protocol):
-    def analyze(self, audio_path: str) -> object: ...
+    def analyze(self, audio_path: str) -> _AnalysisResultLike: ...
 
 
 def analyze_structure(
@@ -40,9 +51,9 @@ def analyze_structure(
             end=float(seg.end),
             label=str(seg.label),
         )
-        for seg in result.segments  # type: ignore[attr-defined]
+        for seg in result.segments
     ]
-    duration = float(result.duration)  # type: ignore[attr-defined]
+    duration = float(result.duration)
 
     structure_path.write_text(
         json.dumps(

@@ -206,8 +206,7 @@ def test_amplitude_analyze_e2e(sine_440_wav: Path):
 
 def test_structure_analyze_e2e(sine_440_wav: Path):
     """Tool wraps the SongFormer pipeline. The pipeline is heavy and downloads
-    weights from HuggingFace, so we stub it here. The real-pipeline path is
-    exercised in tests/test_structure_smoke.py (skipped if weights absent)."""
+    weights from HuggingFace, so we stub it here."""
     from audio_analysis_mcp.tools.structure_analyze import structure_analyze
 
     ws = srv.get_workspace()
@@ -217,7 +216,10 @@ def test_structure_analyze_e2e(sine_440_wav: Path):
     fake_pipeline = MagicMock()
     fake_result = MagicMock()
     fake_result.duration = 1.0
-    seg = MagicMock(); seg.start = 0.0; seg.end = 1.0; seg.label = "intro"
+    seg = MagicMock()
+    seg.start = 0.0
+    seg.end = 1.0
+    seg.label = "intro"
     fake_result.segments = [seg]
     fake_pipeline.analyze.return_value = fake_result
 
@@ -233,7 +235,7 @@ def test_structure_analyze_e2e(sine_440_wav: Path):
     assert len(payload["segments"]) == 1
     assert payload["segments"][0]["label"] == "intro"
     assert Path(payload["structure_path"]).exists()
-    assert "test-song/structure/structure.json" in payload["structure_path"]
+    assert "test-song/song_structure/structure.json" in payload["structure_path"]
 
     # Second call must hit the cache and not invoke the pipeline.
     fake_pipeline.analyze.reset_mock()
