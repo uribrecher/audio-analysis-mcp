@@ -42,5 +42,4 @@ async def test_jobs_import_missing_file_returns_404() -> None:
         r = await client.post(
             "/jobs/import", json={"file_path": "/nonexistent/path/no-such-file.wav"}
         )
-    # normalize_audio raises FileNotFoundError -> handler maps to 404
-    assert r.status_code in (404, 500)  # tolerate either depending on which layer raises
+    assert r.status_code == 404, f"expected 404, got {r.status_code}: {r.text}"

@@ -65,8 +65,27 @@ app = FastAPI(title="audio-analysis-mcp", version="0.1.0")
 _demucs_lock = anyio.Lock()
 _structure_lock = anyio.Lock()
 
-# Optional cap on simultaneous GPU jobs. ``0`` is interpreted as "unbounded".
-_max_gpu_jobs = int(os.environ.get("AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS", "0"))
+# Optional cap on simultaneous GPU jobs. ``0`` or unset is "unbounded".
+# Parse defensively so an invalid env value (typo, empty string) downgrades
+# to "unbounded" with a warning instead of crashing the app at import time.
+def _parse_max_gpu_jobs(raw: str | None) -> int:
+    if not raw:
+        return 0
+    try:
+        v = int(raw)
+        return max(0, v)
+    except ValueError:
+        import warnings
+
+        warnings.warn(
+            f"AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS={raw!r} is not an integer; "
+            "ignoring and running unbounded.",
+            stacklevel=2,
+        )
+        return 0
+
+
+_max_gpu_jobs = _parse_max_gpu_jobs(os.environ.get("AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS"))
 _gpu_slot: anyio.Semaphore | None = (
     anyio.Semaphore(_max_gpu_jobs) if _max_gpu_jobs > 0 else None
 )
@@ -167,12 +186,12 @@ async def jobs_import(req: ImportRequest) -> ImportAudioResult:
 
 @app.post("/jobs/stems")
 async def jobs_stems(req: StemsRequest) -> EventSourceResponse:
-    """Demucs stem separation with streamed progress."""
-    if req.preset not in PRESETS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"preset must be one of {sorted(PRESETS)}",
-        )
+    """Demucs stem separation with streamed progress.
+
+    Preset is validated by the ``Literal[...]`` annotation on ``StemsRequest``
+    — Pydantic rejects unknown values with 422 before this handler runs, so
+    no manual whitelist check is needed.
+    """
     ws = get_workspace()
     try:
         ctx = resolve_job_context(req.audio_path, ws)
