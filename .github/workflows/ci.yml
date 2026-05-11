@@ -15,15 +15,16 @@ jobs:
       # loader defaults to the sibling-repo path, so dev workflow is
       # unchanged.
       TONE_GEN_SCHEMA_DIR: ${{ github.workspace }}/schemas
+      # Ignore [tool.uv.sources] (which redirects songformer to ../SongFormer
+      # for local editable dev) for *every* uv invocation in this job — both
+      # `uv sync` and the implicit auto-sync inside `uv run`. On CI we want
+      # the pinned git URL from project.dependencies.
+      UV_NO_SOURCES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
-      # --no-sources ignores [tool.uv.sources] (which redirects songformer
-      # to ../SongFormer for local editable dev) and resolves the bare
-      # PEP 508 dependencies in pyproject.toml. In CI we want the pinned
-      # git URL, not the sibling-path checkout.
-      - run: uv sync --dev --no-sources
+      - run: uv sync --dev
       - run: uv run mypy src/
       - run: uv run pytest -m "not slow" -v
