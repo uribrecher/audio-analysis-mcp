@@ -27,7 +27,7 @@ def structure_analyze(audio_path: str) -> str:
     """Detect song structure — identifies sections like intro, verse,
     chorus, bridge, pre-chorus, outro with timestamps."""
     ctx = resolve_job_context(audio_path, ws)
-    structure_dir = ws.job_structure_dir(ctx.job_name)
+    structure_dir = ws.job_song_structure_dir(ctx.job_name)
 
     # Cache: return if structure.json already exists
     # Otherwise: run pipeline.analyze(), save to structure.json
@@ -54,9 +54,9 @@ class StructureAnalyzeResult(BaseModel):
 
 ## Workspace
 
-Add `job_structure_dir(job_name)` to the `Workspace` class, returning `jobs/<job>/structure/`.
+Add `job_song_structure_dir(job_name)` to the `Workspace` class, returning `jobs/<job>/song_structure/`.
 
-Results cached at `jobs/<job>/structure/structure.json`.
+Results cached at `jobs/<job>/song_structure/structure.json`.
 
 ## Model loading
 
@@ -78,7 +78,7 @@ dependencies = [
 ```
 jobs/<job>/
 ├── source.wav
-├── structure/
+├── song_structure/
 │   └── structure.json          ← NEW
 ├── stems/<preset>/
 ├── transcriptions/<stem>_<preset>/
