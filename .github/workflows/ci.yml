@@ -15,6 +15,11 @@ jobs:
       # loader defaults to the sibling-repo path, so dev workflow is
       # unchanged.
       TONE_GEN_SCHEMA_DIR: ${{ github.workspace }}/schemas
+      # Ignore [tool.uv.sources] (which redirects songformer to ../SongFormer
+      # for local editable dev) for *every* uv invocation in this job — both
+      # `uv sync` and the implicit auto-sync inside `uv run`. On CI we want
+      # the pinned git URL from project.dependencies.
+      UV_NO_SOURCES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

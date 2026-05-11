@@ -165,3 +165,16 @@ class AmplitudeAnalyzeResult(BaseModel):
     divergence_score: float
     is_consistent: bool
     rejected_reason: str | None
+
+
+class StructureSegment(BaseModel):
+    start: float
+    end: float
+    label: str
+
+
+class StructureAnalyzeResult(BaseModel):
+    structure_path: str
+    segments: list[StructureSegment]
+    duration: float
+    cached: bool

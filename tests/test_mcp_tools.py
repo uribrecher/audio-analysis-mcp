@@ -21,6 +21,7 @@ import audio_analysis_mcp.tools.note_transcribe  # noqa: F401
 import audio_analysis_mcp.tools.note_triage  # noqa: F401
 import audio_analysis_mcp.tools.note_isolate  # noqa: F401
 import audio_analysis_mcp.tools.amplitude_analyze  # noqa: F401
+import audio_analysis_mcp.tools.structure_analyze  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -201,3 +202,47 @@ def test_amplitude_analyze_e2e(sine_440_wav: Path):
     assert "candidates" in payload
     assert "is_consistent" in payload
     assert "divergence_score" in payload
+
+
+def test_structure_analyze_e2e(sine_440_wav: Path):
+    """Tool wraps the SongFormer pipeline. The pipeline is heavy and downloads
+    weights from HuggingFace, so we stub it here."""
+    from audio_analysis_mcp.tools.structure_analyze import structure_analyze
+
+    ws = srv.get_workspace()
+    source = ws.job_dir("test-song") / "source.wav"
+    shutil.copy(sine_440_wav, source)
+
+    fake_pipeline = MagicMock()
+    fake_result = MagicMock()
+    fake_result.duration = 1.0
+    seg = MagicMock()
+    seg.start = 0.0
+    seg.end = 1.0
+    seg.label = "intro"
+    fake_result.segments = [seg]
+    fake_pipeline.analyze.return_value = fake_result
+
+    saved = srv._structure_pipeline
+    srv._structure_pipeline = fake_pipeline
+    try:
+        payload = json.loads(structure_analyze(audio_path=str(source)))
+    finally:
+        srv._structure_pipeline = saved
+
+    assert payload["cached"] is False
+    assert payload["duration"] == 1.0
+    assert len(payload["segments"]) == 1
+    assert payload["segments"][0]["label"] == "intro"
+    assert Path(payload["structure_path"]).exists()
+    assert "test-song/song_structure/structure.json" in payload["structure_path"]
+
+    # Second call must hit the cache and not invoke the pipeline.
+    fake_pipeline.analyze.reset_mock()
+    srv._structure_pipeline = fake_pipeline
+    try:
+        cached_payload = json.loads(structure_analyze(audio_path=str(source)))
+    finally:
+        srv._structure_pipeline = saved
+    assert cached_payload["cached"] is True
+    fake_pipeline.analyze.assert_not_called()
