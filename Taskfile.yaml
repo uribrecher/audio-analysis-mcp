@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  run-server:
+    desc: Start the audio-analysis HTTP+SSE service (localhost:8765 by default).
+    cmds:
+      - uv run python -m audio_analysis_mcp.service
