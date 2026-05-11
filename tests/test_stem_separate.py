@@ -30,7 +30,7 @@ def test_stem_separate_returns_all_stems(sine_440_wav: Path, tmp_path: Path):
     model = _make_mock_model()
     sources_tensor = torch.zeros(1, 4, 2, 44100)
 
-    with patch("audio_analysis_mcp.tools.stem_separate.get_model", return_value=model), \
+    with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model), \
          patch("audio_analysis_mcp.tools.stem_separate.apply_model", return_value=sources_tensor), \
          patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
          patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
@@ -47,7 +47,7 @@ def test_stem_separate_uses_cache(sine_440_wav: Path, tmp_path: Path):
     model = _make_mock_model()
     sources_tensor = torch.zeros(1, 4, 2, 44100)
 
-    with patch("audio_analysis_mcp.tools.stem_separate.get_model", return_value=model) as mock_get, \
+    with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model) as mock_get, \
          patch("audio_analysis_mcp.tools.stem_separate.apply_model", return_value=sources_tensor) as mock_apply, \
          patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
          patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
@@ -64,7 +64,7 @@ def test_stem_separate_uses_cache(sine_440_wav: Path, tmp_path: Path):
 def test_stem_separate_failure_raises(sine_440_wav: Path, tmp_path: Path):
     model = _make_mock_model()
 
-    with patch("audio_analysis_mcp.tools.stem_separate.get_model", return_value=model), \
+    with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model), \
          patch("audio_analysis_mcp.tools.stem_separate.apply_model", side_effect=RuntimeError("OOM")), \
          patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()):
         with pytest.raises(RuntimeError, match="OOM"):
@@ -87,7 +87,7 @@ def test_preset_passes_correct_args_to_apply_model(sine_440_wav: Path, tmp_path:
         model = _make_mock_model()
         sources_tensor = torch.zeros(1, 4, 2, 44100)
 
-        with patch("audio_analysis_mcp.tools.stem_separate.get_model", return_value=model), \
+        with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model), \
              patch("audio_analysis_mcp.tools.stem_separate.apply_model", return_value=sources_tensor) as mock_apply, \
              patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
              patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
@@ -109,7 +109,7 @@ def test_different_presets_use_separate_cache(sine_440_wav: Path, tmp_path: Path
     model = _make_mock_model()
     sources_tensor = torch.zeros(1, 4, 2, 44100)
 
-    with patch("audio_analysis_mcp.tools.stem_separate.get_model", return_value=model), \
+    with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model), \
          patch("audio_analysis_mcp.tools.stem_separate.apply_model", return_value=sources_tensor) as mock_apply, \
          patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
          patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
