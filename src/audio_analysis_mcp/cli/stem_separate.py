@@ -1,4 +1,4 @@
-"""CLI for stem separation with live tqdm progress.
+"""CLI for stem separation with live progress on stderr.
 
 Usage:
     uv run python -m audio_analysis_mcp.cli.stem_separate <audio_path> [--preset fast|medium|accurate]
@@ -6,10 +6,11 @@ Usage:
 import argparse
 import sys
 
-import demucs.apply
 from demucs.pretrained import get_model
 
-from audio_analysis_mcp.tools.stem_separate import stem_separate_impl, PRESETS
+# Import for side effect: installs the routing tqdm class once at startup.
+from audio_analysis_mcp import _demucs_progress  # noqa: F401
+from audio_analysis_mcp.tools.stem_separate import PRESETS, stem_separate_impl
 from audio_analysis_mcp.workspace import Workspace
 
 
@@ -25,8 +26,6 @@ def main() -> None:
     args = parser.parse_args()
 
     preset = PRESETS[args.preset]
-
-    # Count sub-models to calculate total runs
     model = get_model(preset.model)
     num_models = len(model.models) if hasattr(model, "models") else 1
     total_runs = num_models * preset.shifts
@@ -37,23 +36,20 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    # Patch tqdm to show run counter
-    counter = [0]
-    original_tqdm = demucs.apply.tqdm.tqdm  # type: ignore[attr-defined]
+    def progress(stage: str, fraction: float, detail: str | None = None) -> None:
+        if detail:
+            print(f"  [{fraction * 100:5.1f}%] {stage}: {detail}", file=sys.stderr)
+        else:
+            print(f"  [{fraction * 100:5.1f}%] {stage}", file=sys.stderr)
 
-    class _CountingTqdm(original_tqdm):  # type: ignore[misc,valid-type]
-        def __init__(self, *a, **kw):  # type: ignore[no-untyped-def]
-            counter[0] += 1
-            kw["desc"] = f"run {counter[0]}/{total_runs}"
-            super().__init__(*a, **kw)
-
-    demucs.apply.tqdm.tqdm = _CountingTqdm  # type: ignore[attr-defined]
-    try:
-        ws = Workspace()
-        result = stem_separate_impl(args.audio_path, ws.stems, preset_name=args.preset)
-        print(result.model_dump_json(indent=2))
-    finally:
-        demucs.apply.tqdm.tqdm = original_tqdm  # type: ignore[attr-defined]
+    ws = Workspace()
+    result = stem_separate_impl(
+        args.audio_path,
+        ws.stems,
+        preset_name=args.preset,
+        progress=progress,
+    )
+    print(result.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":
