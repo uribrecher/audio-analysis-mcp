@@ -1,15 +1,21 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, TypeAlias
+
 import torch
-from demucs.pretrained import get_model
 from demucs.apply import apply_model
 from demucs.audio import AudioFile, save_audio
-from audio_analysis_mcp.server import mcp, get_workspace
+
+from audio_analysis_mcp import _demucs_progress
+from audio_analysis_mcp.server import get_demucs_model, get_workspace, mcp
 from audio_analysis_mcp.workspace import resolve_job_context
 from audio_analysis_mcp.schemas import StemFile, StemSeparateResult
 
 MANIFEST_FILE = "sources.json"
+
+ProgressFn: TypeAlias = Callable[[str, float, "str | None"], None]
+"""Progress callback used by ``stem_separate_impl``. See its docstring."""
 
 
 @dataclass(frozen=True)
@@ -62,11 +68,34 @@ def _resolve_preset(preset_name: str) -> SeparationPreset:
 
 
 def stem_separate_impl(
-    audio_path: str, stems_dir: Path, preset_name: str = "medium"
+    audio_path: str,
+    stems_dir: Path,
+    preset_name: str = "medium",
+    progress: ProgressFn | None = None,
 ) -> StemSeparateResult:
-    """Run Demucs stem separation via Python API. Returns cached result if available."""
+    """Run Demucs stem separation via Python API. Returns cached result if available.
+
+    Args:
+        audio_path: Source audio file.
+        stems_dir: Output directory for stems + ``sources.json`` manifest.
+        preset_name: One of ``fast | medium | accurate``.
+        progress: Optional callback ``(stage, fraction, detail) -> None``.
+            Stages: ``cache_hit | load_model | run | write | done``.
+            Fraction is monotonically non-decreasing in ``[0, 1]``. Thread-safe:
+            two concurrent calls install independent sinks via
+            ``_demucs_progress.install_sink`` so progress streams don't cross.
+    """
     if not Path(audio_path).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+    def emit(stage: str, fraction: float, detail: str | None = None) -> None:
+        if progress is None:
+            return
+        try:
+            progress(stage, max(0.0, min(1.0, fraction)), detail)
+        except Exception:
+            # Don't let a buggy progress sink kill the job.
+            pass
 
     preset = _resolve_preset(preset_name)
     cache_dir = stems_dir
@@ -74,6 +103,7 @@ def stem_separate_impl(
     # Check cache
     cached_sources = _read_cached(cache_dir)
     if cached_sources is not None:
+        emit("cache_hit", 1.0)
         return StemSeparateResult(
             stems=[StemFile(stem=s, path=str(cache_dir / f"{s}.wav")) for s in cached_sources],
             model=preset.model,
@@ -82,22 +112,49 @@ def stem_separate_impl(
         )
 
     # Cache miss — load model and run separation
-    model = get_model(preset.model)
-    model.eval()
+    emit("load_model", 0.02)
+    model = get_demucs_model(preset.model)
     source_names = list(model.sources)
+    num_sub_models = len(model.models) if hasattr(model, "models") else 1
+    total_runs = max(1, num_sub_models * preset.shifts)
+    emit("load_model", 0.05)
 
     wav = AudioFile(Path(audio_path)).read(streams=0, samplerate=model.samplerate, channels=model.audio_channels)  # type: ignore[no-untyped-call]
-    with torch.no_grad():
-        sources = apply_model(
-            model, wav[None], device=_best_device(),
-            shifts=preset.shifts, overlap=preset.overlap, progress=True,
-        )[0]
 
+    # Demucs's `progress=True` creates one tqdm bar per run (= one per shift
+    # per sub-model). The routing layer (audio_analysis_mcp._demucs_progress)
+    # forwards each tqdm `update` to the sink we install here. We count run
+    # transitions by watching `total` change between updates — tqdm reuses
+    # its `total` field per-bar, so a new total means a new run started.
+    completed_runs = 0
+    last_seen_total = 0
+
+    def _on_tqdm_update(current: int, total: int) -> None:
+        nonlocal completed_runs, last_seen_total
+        if total != last_seen_total and last_seen_total != 0:
+            completed_runs += 1
+        last_seen_total = total
+        run_progress = (current / total) if total else 0.0
+        overall = (completed_runs + run_progress) / total_runs
+        emit("run", 0.05 + 0.9 * overall, f"run {min(completed_runs + 1, total_runs)}/{total_runs}")
+
+    _demucs_progress.install_sink(_on_tqdm_update)
+    try:
+        with torch.no_grad():
+            sources = apply_model(
+                model, wav[None], device=_best_device(),
+                shifts=preset.shifts, overlap=preset.overlap, progress=True,
+            )[0]
+    finally:
+        _demucs_progress.clear_sink()
+
+    emit("write", 0.97)
     cache_dir.mkdir(parents=True, exist_ok=True)
     for i, source_name in enumerate(source_names):
         save_audio(sources[i], cache_dir / f"{source_name}.wav", samplerate=model.samplerate)
     (cache_dir / MANIFEST_FILE).write_text(json.dumps(source_names))
 
+    emit("done", 1.0)
     return StemSeparateResult(
         stems=[StemFile(stem=s, path=str(cache_dir / f"{s}.wav")) for s in source_names],
         model=preset.model,
