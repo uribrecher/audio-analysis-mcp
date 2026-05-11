@@ -19,9 +19,11 @@ dependencies = [
   "signalflow>=0.4.0,<0.5.4",
   "jsonschema>=4.21",
   "referencing>=0.30",
-  "songformer",
+  "songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.1.0",
 ]
 
+# Local dev override: edit ../SongFormer and see changes immediately.
+# CI passes `uv sync --no-sources` so the git URL above wins on the runner.
 [tool.uv.sources]
 songformer = { path = "../SongFormer", editable = true }
 
@@ -35,6 +37,10 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Allow `songformer @ git+https://...` in [project.dependencies].
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m not slow')"]

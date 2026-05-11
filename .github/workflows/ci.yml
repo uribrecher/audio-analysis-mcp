@@ -20,6 +20,10 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
-      - run: uv sync --dev
+      # --no-sources ignores [tool.uv.sources] (which redirects songformer
+      # to ../SongFormer for local editable dev) and resolves the bare
+      # PEP 508 dependencies in pyproject.toml. In CI we want the pinned
+      # git URL, not the sibling-path checkout.
+      - run: uv sync --dev --no-sources
       - run: uv run mypy src/
       - run: uv run pytest -m "not slow" -v
