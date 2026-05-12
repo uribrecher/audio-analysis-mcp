@@ -1,0 +1,35 @@
+{
+  "shape_accuracy": 0.75,
+  "shape_confusion": [
+    [
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "cutoff_norm_mse": 0.07239928096532822,
+  "resonance_mse": 0.06956787407398224,
+  "schema_validation_failures": 0,
+  "round_trip_mel_cosine_mean": 0.9953153878450394,
+  "round_trip_mel_cosine_median": 0.9988541007041931,
+  "n_samples": 4
+}

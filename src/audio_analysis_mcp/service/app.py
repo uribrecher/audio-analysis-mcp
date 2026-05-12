@@ -49,7 +49,8 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from audio_analysis_mcp.analysis.structure_analysis import analyze_structure
-from audio_analysis_mcp.schemas import ImportAudioResult
+from audio_analysis_mcp.analysis.transcription import transcribe_audio
+from audio_analysis_mcp.schemas import ImportAudioResult, NoteTranscribeServiceResult
 from audio_analysis_mcp.server import (
     get_structure_pipeline,
     get_workspace,
@@ -69,6 +70,10 @@ app = FastAPI(title="audio-analysis-mcp", version="0.1.0")
 # underlying model forward passes aren't thread-safe.
 _demucs_lock = anyio.Lock()
 _structure_lock = anyio.Lock()
+# Basic Pitch's predict() is not documented as thread-safe; serialize
+# concurrent transcribe requests for the same reason we serialize stems
+# and structure.
+_transcribe_lock = anyio.Lock()
 
 # Optional cap on simultaneous GPU jobs. ``0`` or unset is "unbounded".
 # Parse defensively so an invalid env value (typo, empty string) downgrades
@@ -111,6 +116,10 @@ class StemsRequest(BaseModel):
 
 
 class StructureRequest(BaseModel):
+    audio_path: str
+
+
+class TranscribeRequest(BaseModel):
     audio_path: str
 
 
@@ -248,5 +257,45 @@ async def jobs_structure(req: StructureRequest) -> EventSourceResponse:
                 # ~1-7GB RSS footprint (varies by song length and device).
                 # See release_structure_pipeline docstring re: lock ordering.
                 release_structure_pipeline()
+
+    return EventSourceResponse(gen())
+
+
+@app.post("/jobs/transcribe")
+async def jobs_transcribe(req: TranscribeRequest) -> EventSourceResponse:
+    """Basic Pitch transcription of a stem to MIDI, with streamed progress.
+
+    The endpoint accepts any path inside a job, but to keep output paths
+    deterministic we require the path to resolve to a stem (i.e. live at
+    ``jobs/<job>/stems/<preset>/<stem>.wav``) — that's what the SONG
+    ANALYSIS panel sends today (``other.wav``). Source-level paths are
+    rejected with 400 so callers don't accidentally hit the noisier
+    full-mix code path.
+    """
+    ws = get_workspace()
+    try:
+        ctx = resolve_job_context(req.audio_path, ws)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if ctx.stem is None or ctx.preset is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Expected a stem file (jobs/<job>/stems/<preset>/<stem>.wav), got: "
+                f"{req.audio_path}"
+            ),
+        )
+    output_dir = str(ws.job_transcriptions_dir(ctx.job_name, ctx.stem, ctx.preset))
+
+    def run(sink: ProgressSink) -> NoteTranscribeServiceResult:
+        midi_path, _notes_path, _notes, cached = transcribe_audio(
+            req.audio_path, output_dir=output_dir, progress=sink,
+        )
+        return NoteTranscribeServiceResult(midi_path=midi_path, cached=cached)
+
+    async def gen() -> AsyncIterator[dict[str, Any]]:
+        async with _transcribe_lock, _optional_gpu_slot():
+            async for evt in _run_with_progress_stream(run):
+                yield evt
 
     return EventSourceResponse(gen())
