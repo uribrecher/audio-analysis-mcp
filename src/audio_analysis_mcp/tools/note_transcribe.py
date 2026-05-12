@@ -17,7 +17,7 @@ def note_transcribe(audio_path: str) -> str:
             f"Expected a stem file (jobs/<job>/stems/<preset>/<stem>.wav), got: {audio_path}"
         )
     output_dir = str(ws.job_transcriptions_dir(ctx.job_name, ctx.stem, ctx.preset))
-    midi_path, notes_path, notes = transcribe_audio(audio_path, output_dir=output_dir)
+    midi_path, notes_path, notes, _cached = transcribe_audio(audio_path, output_dir=output_dir)
     return NoteTranscribeResult(
         midi_path=midi_path,
         notes_path=notes_path,

@@ -103,6 +103,18 @@ class NoteTranscribeResult(BaseModel):
     note_count: int
 
 
+class NoteTranscribeServiceResult(BaseModel):
+    """Wire payload for ``POST /jobs/transcribe`` — deliberately small.
+
+    The full note-event list stays on disk as ``transcription.json`` next
+    to the MIDI; callers that need it can read the sidecar. We don't
+    inline notes here because a busy track can produce thousands of
+    events and we'd rather keep the SSE result frame tiny.
+    """
+    midi_path: str
+    cached: bool
+
+
 class PolyphonyWindow(BaseModel):
     start_time: float
     end_time: float
