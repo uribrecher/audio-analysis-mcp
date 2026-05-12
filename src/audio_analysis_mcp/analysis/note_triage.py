@@ -16,8 +16,14 @@ from audio_analysis_mcp.schemas import (
 
 ProgressFn: TypeAlias = Callable[[str, float, "str | None"], None]
 """Caller-side progress callback used by ``triage_notes_by_sections``.
-Stages: ``cache_hit | section | done``. ``section`` carries the current
-section label in ``detail`` (best-effort context for the UI)."""
+
+Stages this function emits: ``section`` (after each section finishes,
+``detail`` carries the section label) and ``done`` (terminal).
+
+The HTTP ``/jobs/triage`` wrapper in ``service/app.py`` layers extra
+stages on top — ``cache_hit`` (terminal short-circuit when the on-disk
+file already exists) and ``triage`` (priming tick before delegating
+here). Don't confuse them: those don't come from this function."""
 
 WINDOW_SIZE = 0.5  # seconds
 TIME_PADDING = 0.05  # 50ms before/after note
