@@ -2,8 +2,8 @@
 import pytest
 import librosa
 
-from audio_analysis_mcp.analysis.note_triage import triage_notes
-from audio_analysis_mcp.schemas import NoteEvent
+from audio_analysis_mcp.analysis.note_triage import triage_notes, triage_notes_by_sections
+from audio_analysis_mcp.schemas import NoteEvent, TriageSection
 
 
 def _note(start: float, end: float, pitch: int, amp: float = 0.8) -> NoteEvent:
@@ -319,3 +319,82 @@ def test_polyphony_profile_includes_notes_outside_window():
     # at t≈2.0 should be 2, not 1.
     bucket_at_2 = next(w for w in data.polyphony_profile if w.start_time <= 2.0 < w.end_time)
     assert bucket_at_2.note_count == 2
+
+
+class TestTriageBySections:
+    """Per-section triage shares the underlying single-window logic; these
+    tests pin the array-shape, index alignment, label preservation, and
+    polyphony-profile slicing rather than re-testing the scoring math."""
+
+    def test_empty_sections(self):
+        notes = [_ev(0.0, 1.0, 60)]
+        out = triage_notes_by_sections(notes, sections=[], min_duration=0.0)
+        assert out.sections == []
+
+    def test_section_with_no_notes_kept_in_output(self):
+        """An empty section must NOT be skipped — array index has to stay
+        aligned with the input section list so a consumer can pair them
+        positionally with the original SongFormer segments."""
+        notes = [_ev(0.0, 0.8, 60)]  # all activity in [0, 0.8]
+        sections = [
+            TriageSection(start_time=0.0, end_time=1.0, label="intro"),
+            TriageSection(start_time=10.0, end_time=12.0, label="outro"),  # empty
+        ]
+        out = triage_notes_by_sections(notes, sections=sections, min_duration=0.0)
+        assert len(out.sections) == 2
+        assert out.sections[1].label == "outro"
+        assert out.sections[1].candidates == []
+
+    def test_label_and_index_preserved(self):
+        notes = [
+            _ev(0.5, 0.9, 60), _ev(1.5, 1.9, 62),
+            _ev(2.5, 2.9, 64), _ev(3.5, 3.9, 67),
+        ]
+        sections = [
+            TriageSection(start_time=0.0, end_time=2.0, label="verse"),
+            TriageSection(start_time=2.0, end_time=4.0, label="chorus"),
+        ]
+        out = triage_notes_by_sections(notes, sections=sections, min_duration=0.0)
+        assert [s.index for s in out.sections] == [0, 1]
+        assert [s.label for s in out.sections] == ["verse", "chorus"]
+        assert (out.sections[0].start_time, out.sections[0].end_time) == (0.0, 2.0)
+        assert (out.sections[1].start_time, out.sections[1].end_time) == (2.0, 4.0)
+
+    def test_candidates_filtered_by_section_window(self):
+        """A note's ONSET determines which section's candidate list it can
+        belong to — same semantics as the single-window `start_time`/`end_time`
+        filter in triage_notes."""
+        notes = [
+            _ev(0.5, 0.9, 60),    # in verse
+            _ev(2.5, 2.9, 64),    # in chorus
+            _ev(5.5, 5.9, 67),    # outside both
+        ]
+        sections = [
+            TriageSection(start_time=0.0, end_time=2.0, label="verse"),
+            TriageSection(start_time=2.0, end_time=4.0, label="chorus"),
+        ]
+        out = triage_notes_by_sections(notes, sections=sections, min_duration=0.0)
+        verse_pitches = {c.members[0].note.pitch_midi for c in out.sections[0].candidates}
+        chorus_pitches = {c.members[0].note.pitch_midi for c in out.sections[1].candidates}
+        assert verse_pitches == {60}
+        assert chorus_pitches == {64}
+
+    def test_polyphony_profile_trimmed_to_section(self):
+        """Each section's persisted polyphony_profile must be the slice of
+        the whole-song profile that overlaps the section — not the full
+        profile duplicated across every entry."""
+        notes = [
+            _ev(0.0, 10.0, 60),   # spans whole song; contributes to polyphony everywhere
+            _ev(1.0, 1.2, 64),
+            _ev(5.0, 5.2, 67),
+        ]
+        sections = [
+            TriageSection(start_time=0.0, end_time=2.0, label="a"),
+            TriageSection(start_time=4.0, end_time=6.0, label="b"),
+        ]
+        out = triage_notes_by_sections(notes, sections=sections, min_duration=0.0)
+        # Each section's profile lives within (or straddling) its own window only.
+        for entry in out.sections:
+            for w in entry.polyphony_profile:
+                assert w.end_time > entry.start_time
+                assert w.start_time < entry.end_time

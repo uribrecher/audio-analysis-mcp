@@ -156,6 +156,39 @@ class NoteTriageResult(BaseModel):
     top_candidates: list[CandidateCluster]
 
 
+class TriageSection(BaseModel):
+    """Input shape for per-section triage — mirrors a SongFormer segment
+    boundary plus its semantic label. Sections are typically sourced
+    directly from a structure_analyze result; the label is preserved
+    end-to-end so downstream tooling can render `intro / verse / chorus`
+    without re-joining against the structure output."""
+    start_time: float
+    end_time: float
+    label: str
+
+
+class SectionTriage(BaseModel):
+    """One entry in the per-section triage output. Self-describing:
+    carries its section metadata inline so a consumer doesn't need to
+    cross-reference the original section list by index. ``polyphony_profile``
+    is trimmed to windows overlapping this section (the underlying
+    `triage_notes` call uses the full song's profile for scoring, but
+    only the section-local slice is persisted in the per-section file)."""
+    index: int
+    label: str
+    start_time: float
+    end_time: float
+    polyphony_profile: list[PolyphonyWindow]
+    candidates: list[CandidateCluster]
+
+
+class NoteTriageBySectionsFileData(BaseModel):
+    """Container for per-section triage output. Array is the canonical
+    shape (not dict-keyed) because sections are intrinsically ordered
+    and labels are non-unique (most songs have multiple verses)."""
+    sections: list[SectionTriage]
+
+
 class NoteIsolateResult(BaseModel):
     audio_path: str
     duration_seconds: float
