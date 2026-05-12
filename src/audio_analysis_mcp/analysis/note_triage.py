@@ -220,7 +220,32 @@ def triage_notes(
     # Polyphony profile uses all notes — including ones that started outside
     # the analysis window but still affect polyphony at the window edges.
     profile = _build_polyphony_profile(notes)
+    return _triage_with_profile(
+        notes=notes,
+        profile=profile,
+        min_duration=min_duration,
+        max_candidates=max_candidates,
+        start_time=start_time,
+        end_time=end_time,
+        jitter_tolerance=jitter_tolerance,
+    )
 
+
+def _triage_with_profile(
+    notes: list[NoteEvent],
+    profile: list[PolyphonyWindow],
+    min_duration: float,
+    max_candidates: int,
+    start_time: float | None,
+    end_time: float | None,
+    jitter_tolerance: float,
+) -> NoteTriageFileData:
+    """Internal: the triage pipeline with the polyphony profile passed in.
+
+    Split out from `triage_notes` so `triage_notes_by_sections` can build
+    the profile once across the whole song and reuse it for every section
+    rather than paying O(notes) per section.
+    """
     # Filter for clustering: only notes whose onset falls inside the window
     # become candidates. Notes that started outside contribute to the profile
     # but cannot themselves be candidates.
@@ -287,15 +312,22 @@ def triage_notes_by_sections(
     the input section list.
 
     Each section's ``polyphony_profile`` is trimmed to the windows that
-    overlap the section's time range — the underlying ``triage_notes``
-    builds the profile over the full song (needed for correct scoring at
-    section boundaries) but we don't want every section in the output file
-    to duplicate the whole-song profile, so we slice it here.
+    overlap the section's time range — the underlying scoring uses the
+    full song's profile (needed for correct context at section boundaries)
+    but we don't want every section in the output file to duplicate the
+    whole-song profile, so we slice it here.
+
+    The profile is built ONCE across all notes and reused for every
+    section (it depends only on `notes`, not on the section window), so
+    this stays O(notes + sum-of-section-clustering) instead of
+    O(sections * notes).
     """
+    profile = _build_polyphony_profile(notes)
     out: list[SectionTriage] = []
     for idx, section in enumerate(sections):
-        per = triage_notes(
+        per = _triage_with_profile(
             notes=notes,
+            profile=profile,
             min_duration=min_duration,
             max_candidates=max_candidates,
             start_time=section.start_time,
