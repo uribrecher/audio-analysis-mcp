@@ -45,6 +45,7 @@ from typing import Any, Literal
 import anyio
 from anyio import to_thread
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -58,6 +59,18 @@ from audio_analysis_mcp.tools.stem_separate import PRESETS, stem_separate_impl
 from audio_analysis_mcp.workspace import resolve_job_context
 
 app = FastAPI(title="audio-analysis-mcp", version="0.1.0")
+
+# The Electron mock-runner shell loads from a ``file://`` origin, so its
+# fetch calls into the service are cross-origin from Chromium's POV and
+# get blocked unless we send CORS headers. The service binds to 127.0.0.1
+# (see ``service/__main__.py``) so allowing all origins is safe — only
+# code running on the same machine can reach the socket.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Per-pipeline locks: stems and structure can run in parallel with each
 # other (different models), but two of the same kind serialize because the
