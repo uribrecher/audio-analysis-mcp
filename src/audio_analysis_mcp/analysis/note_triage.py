@@ -7,6 +7,9 @@ from audio_analysis_mcp.schemas import (
     CandidateNote,
     CandidateCluster,
     NoteTriageFileData,
+    TriageSection,
+    SectionTriage,
+    NoteTriageBySectionsFileData,
 )
 
 WINDOW_SIZE = 0.5  # seconds
@@ -266,3 +269,49 @@ def triage_notes(
         c.model_copy(update={"score": round(s, 4)}) for c, s in selected
     ]
     return NoteTriageFileData(polyphony_profile=profile, candidates=candidates)
+
+
+def triage_notes_by_sections(
+    notes: list[NoteEvent],
+    sections: list[TriageSection],
+    min_duration: float = 0.5,
+    max_candidates: int = 10,
+    jitter_tolerance: float = 0.0,
+) -> NoteTriageBySectionsFileData:
+    """Per-section triage. Delegates to :func:`triage_notes` once per
+    section using the section's ``(start_time, end_time)`` as the analysis
+    window, so all scoring semantics (polyphony context across the full
+    song, jitter tolerance, pluck filter, pitch-diversity penalty) are
+    identical to the single-window path. Empty sections are kept in the
+    output with ``candidates=[]`` so the array index stays aligned with
+    the input section list.
+
+    Each section's ``polyphony_profile`` is trimmed to the windows that
+    overlap the section's time range — the underlying ``triage_notes``
+    builds the profile over the full song (needed for correct scoring at
+    section boundaries) but we don't want every section in the output file
+    to duplicate the whole-song profile, so we slice it here.
+    """
+    out: list[SectionTriage] = []
+    for idx, section in enumerate(sections):
+        per = triage_notes(
+            notes=notes,
+            min_duration=min_duration,
+            max_candidates=max_candidates,
+            start_time=section.start_time,
+            end_time=section.end_time,
+            jitter_tolerance=jitter_tolerance,
+        )
+        section_profile = [
+            w for w in per.polyphony_profile
+            if w.end_time > section.start_time and w.start_time < section.end_time
+        ]
+        out.append(SectionTriage(
+            index=idx,
+            label=section.label,
+            start_time=section.start_time,
+            end_time=section.end_time,
+            polyphony_profile=section_profile,
+            candidates=per.candidates,
+        ))
+    return NoteTriageBySectionsFileData(sections=out)
