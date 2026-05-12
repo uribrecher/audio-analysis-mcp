@@ -45,12 +45,19 @@ from typing import Any, Literal
 import anyio
 from anyio import to_thread
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from sse_starlette.sse import EventSourceResponse
 
+from audio_analysis_mcp.analysis.note_triage import triage_notes_by_sections
 from audio_analysis_mcp.analysis.structure_analysis import analyze_structure
 from audio_analysis_mcp.analysis.transcription import transcribe_audio
-from audio_analysis_mcp.schemas import ImportAudioResult, NoteTranscribeServiceResult
+from audio_analysis_mcp.schemas import (
+    ImportAudioResult,
+    NoteEvent,
+    NoteTranscribeServiceResult,
+    NoteTriageBySectionsServiceResult,
+    TriageSection,
+)
 from audio_analysis_mcp.server import (
     get_structure_pipeline,
     get_workspace,
@@ -74,6 +81,11 @@ _structure_lock = anyio.Lock()
 # concurrent transcribe requests for the same reason we serialize stems
 # and structure.
 _transcribe_lock = anyio.Lock()
+# Per-section triage is pure Python (clustering + scoring, librosa midi_to_hz);
+# cheap enough that lock contention is irrelevant in practice, but defensive
+# serialization keeps the file-write step uncontested and mirrors the rest
+# of the service surface.
+_triage_lock = anyio.Lock()
 
 # Optional cap on simultaneous GPU jobs. ``0`` or unset is "unbounded".
 # Parse defensively so an invalid env value (typo, empty string) downgrades
@@ -121,6 +133,14 @@ class StructureRequest(BaseModel):
 
 class TranscribeRequest(BaseModel):
     audio_path: str
+
+
+class TriageRequest(BaseModel):
+    audio_path: str
+    sections: list[TriageSection]
+    min_duration: float = 0.5
+    max_candidates: int = 10
+    jitter_tolerance: float = 0.0
 
 
 # -------- shared helpers --------
@@ -306,6 +326,105 @@ async def jobs_transcribe(req: TranscribeRequest) -> EventSourceResponse:
 
     async def gen() -> AsyncIterator[dict[str, Any]]:
         async with _transcribe_lock, _optional_gpu_slot():
+            async for evt in _run_with_progress_stream(run):
+                yield evt
+
+    return EventSourceResponse(gen())
+
+
+@app.post("/jobs/triage")
+async def jobs_triage(req: TriageRequest) -> EventSourceResponse:
+    """Per-section note triage against a stem's transcription, streamed.
+
+    Expects ``audio_path`` to be a stem (``jobs/<job>/stems/<preset>/<stem>.wav``)
+    — same convention as ``/jobs/transcribe`` — so we can derive the notes
+    JSON from the per-stem transcription directory. Sections are passed
+    through verbatim from the caller (typically a SongFormer structure
+    result), index-aligned in the output.
+
+    Result event is a tiny ``{ triage_path, cached }``; the full per-section
+    triage payload (candidates, polyphony profiles) lives on disk because
+    it can grow to KB-MB on a busy song.
+    """
+    ws = get_workspace()
+    try:
+        ctx = resolve_job_context(req.audio_path, ws)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if ctx.stem is None or ctx.preset is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Expected a stem file (jobs/<job>/stems/<preset>/<stem>.wav), got: "
+                f"{req.audio_path}"
+            ),
+        )
+    if not req.audio_path.lower().endswith(".wav"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected a .wav stem file, got: {req.audio_path}",
+        )
+
+    # The transcription JSON sits in the per-stem transcription dir written
+    # by /jobs/transcribe. Triage can't run without it — fail fast with a
+    # clear error rather than letting the read explode later in the worker.
+    notes_path = (
+        ws.job_transcriptions_dir(ctx.job_name, ctx.stem, ctx.preset)
+        / "transcription.json"
+    )
+    if not notes_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Transcription JSON not found at "
+                f"{notes_path} — run /jobs/transcribe first."
+            ),
+        )
+
+    triage_dir = ws.job_triage_dir(ctx.job_name, ctx.stem, ctx.preset)
+    # Distinct filename from the existing single-window `triage.json` so
+    # the legacy MCP tool's output keeps its own slot on disk.
+    triage_path = triage_dir / "triage_by_sections.json"
+
+    def run(sink: ProgressSink) -> NoteTriageBySectionsServiceResult:
+        # Cache hit: previous per-section triage already on disk. We don't
+        # validate its shape here — corrupt cache is a much rarer concern
+        # than for the transcribe path (the file is produced by this same
+        # service) and a stale-cache invalidation can be added later if it
+        # becomes a problem.
+        if triage_path.exists():
+            try:
+                sink("cache_hit", 1.0, None)
+            except Exception:
+                pass
+            return NoteTriageBySectionsServiceResult(
+                triage_path=str(triage_path), cached=True,
+            )
+
+        adapter = TypeAdapter(list[NoteEvent])
+        notes = adapter.validate_json(notes_path.read_text())
+
+        try:
+            sink("triage", 0.05, None)
+        except Exception:
+            pass
+
+        result = triage_notes_by_sections(
+            notes=notes,
+            sections=req.sections,
+            min_duration=req.min_duration,
+            max_candidates=req.max_candidates,
+            jitter_tolerance=req.jitter_tolerance,
+            progress=sink,
+        )
+        triage_dir.mkdir(parents=True, exist_ok=True)
+        triage_path.write_text(result.model_dump_json(indent=2))
+        return NoteTriageBySectionsServiceResult(
+            triage_path=str(triage_path), cached=False,
+        )
+
+    async def gen() -> AsyncIterator[dict[str, Any]]:
+        async with _triage_lock:
             async for evt in _run_with_progress_stream(run):
                 yield evt
 
