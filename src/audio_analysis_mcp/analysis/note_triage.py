@@ -7,6 +7,9 @@ from audio_analysis_mcp.schemas import (
     CandidateNote,
     CandidateCluster,
     NoteTriageFileData,
+    TriageSection,
+    SectionTriage,
+    NoteTriageBySectionsFileData,
 )
 
 WINDOW_SIZE = 0.5  # seconds
@@ -217,7 +220,32 @@ def triage_notes(
     # Polyphony profile uses all notes — including ones that started outside
     # the analysis window but still affect polyphony at the window edges.
     profile = _build_polyphony_profile(notes)
+    return _triage_with_profile(
+        notes=notes,
+        profile=profile,
+        min_duration=min_duration,
+        max_candidates=max_candidates,
+        start_time=start_time,
+        end_time=end_time,
+        jitter_tolerance=jitter_tolerance,
+    )
 
+
+def _triage_with_profile(
+    notes: list[NoteEvent],
+    profile: list[PolyphonyWindow],
+    min_duration: float,
+    max_candidates: int,
+    start_time: float | None,
+    end_time: float | None,
+    jitter_tolerance: float,
+) -> NoteTriageFileData:
+    """Internal: the triage pipeline with the polyphony profile passed in.
+
+    Split out from `triage_notes` so `triage_notes_by_sections` can build
+    the profile once across the whole song and reuse it for every section
+    rather than paying O(notes) per section.
+    """
     # Filter for clustering: only notes whose onset falls inside the window
     # become candidates. Notes that started outside contribute to the profile
     # but cannot themselves be candidates.
@@ -266,3 +294,56 @@ def triage_notes(
         c.model_copy(update={"score": round(s, 4)}) for c, s in selected
     ]
     return NoteTriageFileData(polyphony_profile=profile, candidates=candidates)
+
+
+def triage_notes_by_sections(
+    notes: list[NoteEvent],
+    sections: list[TriageSection],
+    min_duration: float = 0.5,
+    max_candidates: int = 10,
+    jitter_tolerance: float = 0.0,
+) -> NoteTriageBySectionsFileData:
+    """Per-section triage. Delegates to :func:`triage_notes` once per
+    section using the section's ``(start_time, end_time)`` as the analysis
+    window, so all scoring semantics (polyphony context across the full
+    song, jitter tolerance, pluck filter, pitch-diversity penalty) are
+    identical to the single-window path. Empty sections are kept in the
+    output with ``candidates=[]`` so the array index stays aligned with
+    the input section list.
+
+    Each section's ``polyphony_profile`` is trimmed to the windows that
+    overlap the section's time range — the underlying scoring uses the
+    full song's profile (needed for correct context at section boundaries)
+    but we don't want every section in the output file to duplicate the
+    whole-song profile, so we slice it here.
+
+    The profile is built ONCE across all notes and reused for every
+    section (it depends only on `notes`, not on the section window), so
+    this stays O(notes + sum-of-section-clustering) instead of
+    O(sections * notes).
+    """
+    profile = _build_polyphony_profile(notes)
+    out: list[SectionTriage] = []
+    for idx, section in enumerate(sections):
+        per = _triage_with_profile(
+            notes=notes,
+            profile=profile,
+            min_duration=min_duration,
+            max_candidates=max_candidates,
+            start_time=section.start_time,
+            end_time=section.end_time,
+            jitter_tolerance=jitter_tolerance,
+        )
+        section_profile = [
+            w for w in per.polyphony_profile
+            if w.end_time > section.start_time and w.start_time < section.end_time
+        ]
+        out.append(SectionTriage(
+            index=idx,
+            label=section.label,
+            start_time=section.start_time,
+            end_time=section.end_time,
+            polyphony_profile=section_profile,
+            candidates=per.candidates,
+        ))
+    return NoteTriageBySectionsFileData(sections=out)
