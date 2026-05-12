@@ -106,13 +106,17 @@ async def test_jobs_structure_cache_hit_emits_one_progress(sine_440_wav: Path) -
 
     pipeline = _fake_pipeline_factory()
     saved = srv._structure_pipeline
-    srv._structure_pipeline = pipeline
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # First call populates cache.
+            # First call populates cache. Re-inject the mock before each
+            # request because the handler now calls release_structure_pipeline
+            # in finally to drop RSS — without the re-injection the second
+            # request would try to load the real SongFormer pipeline.
+            srv._structure_pipeline = pipeline
             await client.post("/jobs/structure", json={"audio_path": str(source)})
             # Second call should hit the cache and emit `cache_hit` only.
+            srv._structure_pipeline = pipeline
             r = await client.post("/jobs/structure", json={"audio_path": str(source)})
             body = r.text
     finally:
@@ -125,3 +129,28 @@ async def test_jobs_structure_cache_hit_emits_one_progress(sine_440_wav: Path) -
     assert progresses[0]["data"]["fraction"] == 1.0
     results = [e for e in events if e["event"] == "result"]
     assert results[0]["data"]["cached"] is True
+
+
+@pytest.mark.asyncio
+async def test_jobs_structure_releases_pipeline_after_request(sine_440_wav: Path) -> None:
+    """Every /jobs/structure request must clear srv._structure_pipeline in
+    its `finally`, so a long-running service doesn't park ~1-7GB of weights
+    in RSS between user-initiated analyses.
+    """
+    ws = srv.get_workspace()
+    source = ws.job_dir("test-song") / "source.wav"
+    shutil.copy(sine_440_wav, source)
+
+    pipeline = _fake_pipeline_factory()
+    saved = srv._structure_pipeline
+    srv._structure_pipeline = pipeline
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.post(
+                "/jobs/structure", json={"audio_path": str(source)}
+            )
+        assert r.status_code == 200
+        assert srv._structure_pipeline is None
+    finally:
+        srv._structure_pipeline = saved

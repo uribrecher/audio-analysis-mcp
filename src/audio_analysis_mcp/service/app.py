@@ -50,7 +50,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from audio_analysis_mcp.analysis.structure_analysis import analyze_structure
 from audio_analysis_mcp.schemas import ImportAudioResult
-from audio_analysis_mcp.server import get_structure_pipeline, get_workspace
+from audio_analysis_mcp.server import (
+    get_structure_pipeline,
+    get_workspace,
+    release_demucs_model,
+    release_structure_pipeline,
+)
 from audio_analysis_mcp.service.progress import ProgressChannel
 from audio_analysis_mcp.service.sse import error_event, progress_event, result_event
 from audio_analysis_mcp.tools.import_audio import import_audio_impl
@@ -201,12 +206,20 @@ async def jobs_stems(req: StemsRequest) -> EventSourceResponse:
 
     async def gen() -> AsyncIterator[dict[str, Any]]:
         async with _demucs_lock, _optional_gpu_slot():
-            async for evt in _run_with_progress_stream(
-                lambda sink: stem_separate_impl(
-                    req.audio_path, stems_dir, preset_name=req.preset, progress=sink
-                )
-            ):
-                yield evt
+            try:
+                async for evt in _run_with_progress_stream(
+                    lambda sink: stem_separate_impl(
+                        req.audio_path, stems_dir, preset_name=req.preset, progress=sink
+                    )
+                ):
+                    yield evt
+            finally:
+                # Drop the Demucs model's RSS while we still hold the
+                # lock — a concurrent /jobs/stems queued behind us will
+                # pay the reload cost rather than hit a half-torn-down
+                # singleton. The cap on idle memory is worth the ~10-20s
+                # reload on the next request.
+                release_demucs_model(PRESETS[req.preset].model)
 
     return EventSourceResponse(gen())
 
@@ -223,11 +236,17 @@ async def jobs_structure(req: StructureRequest) -> EventSourceResponse:
 
     async def gen() -> AsyncIterator[dict[str, Any]]:
         async with _structure_lock, _optional_gpu_slot():
-            async for evt in _run_with_progress_stream(
-                lambda sink: analyze_structure(
-                    req.audio_path, output_dir, get_structure_pipeline(), progress=sink
-                )
-            ):
-                yield evt
+            try:
+                async for evt in _run_with_progress_stream(
+                    lambda sink: analyze_structure(
+                        req.audio_path, output_dir, get_structure_pipeline(), progress=sink
+                    )
+                ):
+                    yield evt
+            finally:
+                # Drop the SongFormer pipeline immediately to release its
+                # ~1-7GB RSS footprint (varies by song length and device).
+                # See release_structure_pipeline docstring re: lock ordering.
+                release_structure_pipeline()
 
     return EventSourceResponse(gen())
