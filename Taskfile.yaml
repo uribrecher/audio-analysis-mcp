@@ -12,5 +12,7 @@ tasks:
       box can't hold concurrent SongFormer + Demucs inferences in unified
       memory (saw 33GB RSS during a parallel run). Serializes stems and
       structure jobs across pipelines without changing the panel UI.
+    env:
+      AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS: 1
     cmds:
-      - AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS=1 uv run python -m audio_analysis_mcp.service
+      - uv run python -m audio_analysis_mcp.service
