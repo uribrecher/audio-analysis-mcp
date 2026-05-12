@@ -1,3 +1,5 @@
+from typing import Callable, TypeAlias
+
 import librosa
 import numpy as np
 
@@ -11,6 +13,17 @@ from audio_analysis_mcp.schemas import (
     SectionTriage,
     NoteTriageBySectionsFileData,
 )
+
+ProgressFn: TypeAlias = Callable[[str, float, "str | None"], None]
+"""Caller-side progress callback used by ``triage_notes_by_sections``.
+
+Stages this function emits: ``section`` (after each section finishes,
+``detail`` carries the section label) and ``done`` (terminal).
+
+The HTTP ``/jobs/triage`` wrapper in ``service/app.py`` layers extra
+stages on top — ``cache_hit`` (terminal short-circuit when the on-disk
+file already exists) and ``triage`` (priming tick before delegating
+here). Don't confuse them: those don't come from this function."""
 
 WINDOW_SIZE = 0.5  # seconds
 TIME_PADDING = 0.05  # 50ms before/after note
@@ -302,6 +315,7 @@ def triage_notes_by_sections(
     min_duration: float = 0.5,
     max_candidates: int = 10,
     jitter_tolerance: float = 0.0,
+    progress: ProgressFn | None = None,
 ) -> NoteTriageBySectionsFileData:
     """Per-section triage. Delegates to :func:`triage_notes` once per
     section using the section's ``(start_time, end_time)`` as the analysis
@@ -321,9 +335,23 @@ def triage_notes_by_sections(
     section (it depends only on `notes`, not on the section window), so
     this stays O(notes + sum-of-section-clustering) instead of
     O(sections * notes).
+
+    Optional ``progress`` is called as each section finishes — the fraction
+    is ``(idx + 1) / len(sections)`` and ``detail`` carries the section
+    label. Useful when streaming this over SSE.
     """
+    def emit(stage: str, fraction: float, detail: "str | None" = None) -> None:
+        if progress is None:
+            return
+        try:
+            progress(stage, max(0.0, min(1.0, fraction)), detail)
+        except Exception:
+            # Don't let a buggy sink kill the run.
+            pass
+
     profile = _build_polyphony_profile(notes)
     out: list[SectionTriage] = []
+    total = max(1, len(sections))
     for idx, section in enumerate(sections):
         per = _triage_with_profile(
             notes=notes,
@@ -346,4 +374,7 @@ def triage_notes_by_sections(
             polyphony_profile=section_profile,
             candidates=per.candidates,
         ))
+        emit("section", (idx + 1) / total, section.label)
+
+    emit("done", 1.0)
     return NoteTriageBySectionsFileData(sections=out)

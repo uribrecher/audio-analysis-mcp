@@ -189,6 +189,15 @@ class NoteTriageBySectionsFileData(BaseModel):
     sections: list[SectionTriage]
 
 
+class NoteTriageBySectionsServiceResult(BaseModel):
+    """Wire payload for ``POST /jobs/triage`` — small by design. The full
+    per-section payload (candidates, polyphony profiles) lives on disk at
+    ``triage_path``; loading it into the SSE result frame is wasteful for
+    a UI that just wants to know it can read the file."""
+    triage_path: str
+    cached: bool
+
+
 class NoteIsolateResult(BaseModel):
     audio_path: str
     duration_seconds: float
