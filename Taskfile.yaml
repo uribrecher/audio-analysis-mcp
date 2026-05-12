@@ -5,3 +5,12 @@ tasks:
     desc: Start the audio-analysis HTTP+SSE service (localhost:8765 by default).
     cmds:
       - uv run python -m audio_analysis_mcp.service
+
+  run-server-cap1:
+    desc: >-
+      Start the service with GPU concurrency capped at 1. Use this when the
+      box can't hold concurrent SongFormer + Demucs inferences in unified
+      memory (saw 33GB RSS during a parallel run). Serializes stems and
+      structure jobs across pipelines without changing the panel UI.
+    cmds:
+      - AUDIO_ANALYSIS_SERVICE_MAX_GPU_JOBS=1 uv run python -m audio_analysis_mcp.service
