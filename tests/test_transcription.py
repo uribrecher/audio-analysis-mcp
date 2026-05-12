@@ -34,7 +34,7 @@ def test_single_note(mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path
     mock_predict.return_value = _mock_predict_result([
         (0.05, 0.95, 69, 0.8),  # A4 = MIDI 69
     ])
-    midi_path, notes_path, notes = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
+    midi_path, notes_path, notes, _cached = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
     assert Path(midi_path).exists()
     assert Path(midi_path).suffix == ".mid"
     assert Path(notes_path).exists()
@@ -52,7 +52,7 @@ def test_two_simultaneous_notes(mock_predict: MagicMock, two_note_wav: Path, tmp
         (0.05, 0.95, 60, 0.7),  # C4
         (0.05, 0.95, 64, 0.7),  # E4
     ])
-    midi_path, notes_path, notes = transcribe_audio(str(two_note_wav), output_dir=str(tmp_path))
+    midi_path, notes_path, notes, _cached = transcribe_audio(str(two_note_wav), output_dir=str(tmp_path))
     assert len(notes) == 2
     pitches = {n.pitch_midi for n in notes}
     assert pitches == {60, 64}
@@ -63,7 +63,7 @@ def test_note_event_fields_populated(mock_predict: MagicMock, sine_440_wav: Path
     mock_predict.return_value = _mock_predict_result([
         (0.1, 0.9, 69, 0.6),
     ])
-    _, _, notes = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
+    _, _, notes, _cached = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
     note = notes[0]
     assert isinstance(note.start_time, float)
     assert isinstance(note.end_time, float)
@@ -75,6 +75,31 @@ def test_note_event_fields_populated(mock_predict: MagicMock, sine_440_wav: Path
 @patch("audio_analysis_mcp.analysis.transcription.predict")
 def test_empty_transcription(mock_predict: MagicMock, silence_wav: Path, tmp_path: Path):
     mock_predict.return_value = _mock_predict_result([])
-    midi_path, notes_path, notes = transcribe_audio(str(silence_wav), output_dir=str(tmp_path))
+    midi_path, notes_path, notes, _cached = transcribe_audio(str(silence_wav), output_dir=str(tmp_path))
     assert Path(midi_path).exists()
     assert notes == []
+
+
+@patch("audio_analysis_mcp.analysis.transcription.predict")
+def test_corrupt_cache_falls_through_to_fresh_predict(
+    mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path,
+):
+    """If transcription.json is corrupt/unreadable, treat as a cache miss
+    and re-run predict — silently returning notes=[] would mislead the
+    MCP-tool path (which surfaces note_count=len(notes)) and the panel."""
+    mock_predict.return_value = _mock_predict_result([(0.1, 0.9, 60, 0.7)])
+
+    # Pre-seed both cache artifacts: a real-ish MIDI shell and a garbage
+    # JSON. The midi shell satisfies the .exists() check; the JSON is
+    # what triggers the parse failure.
+    midi_pre = tmp_path / "transcription.mid"
+    midi_pre.write_bytes(b"MThd-corrupt-but-exists")
+    notes_pre = tmp_path / "transcription.json"
+    notes_pre.write_text("{ this is not valid json")
+
+    _, _, notes, cached = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
+
+    assert cached is False, "corrupt cache must invalidate, not report cached=True"
+    assert mock_predict.called, "fall-through path must re-run predict"
+    assert len(notes) == 1
+    assert notes[0].pitch_midi == 60
