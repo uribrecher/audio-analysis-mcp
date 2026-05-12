@@ -285,6 +285,17 @@ async def jobs_transcribe(req: TranscribeRequest) -> EventSourceResponse:
                 f"{req.audio_path}"
             ),
         )
+    # `resolve_job_context` recognises any file under `stems/<preset>/` as a
+    # stem regardless of extension, so an explicit suffix check is the only
+    # thing keeping `.../stems/medium/other.mp3` from sneaking through and
+    # tripping the renderer downstream (the panel only ever sends .wav).
+    if not req.audio_path.lower().endswith(".wav"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Expected a .wav stem file, got: {req.audio_path}"
+            ),
+        )
     output_dir = str(ws.job_transcriptions_dir(ctx.job_name, ctx.stem, ctx.preset))
 
     def run(sink: ProgressSink) -> NoteTranscribeServiceResult:

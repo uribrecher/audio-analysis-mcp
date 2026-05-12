@@ -78,3 +78,28 @@ def test_empty_transcription(mock_predict: MagicMock, silence_wav: Path, tmp_pat
     midi_path, notes_path, notes, _cached = transcribe_audio(str(silence_wav), output_dir=str(tmp_path))
     assert Path(midi_path).exists()
     assert notes == []
+
+
+@patch("audio_analysis_mcp.analysis.transcription.predict")
+def test_corrupt_cache_falls_through_to_fresh_predict(
+    mock_predict: MagicMock, sine_440_wav: Path, tmp_path: Path,
+):
+    """If transcription.json is corrupt/unreadable, treat as a cache miss
+    and re-run predict — silently returning notes=[] would mislead the
+    MCP-tool path (which surfaces note_count=len(notes)) and the panel."""
+    mock_predict.return_value = _mock_predict_result([(0.1, 0.9, 60, 0.7)])
+
+    # Pre-seed both cache artifacts: a real-ish MIDI shell and a garbage
+    # JSON. The midi shell satisfies the .exists() check; the JSON is
+    # what triggers the parse failure.
+    midi_pre = tmp_path / "transcription.mid"
+    midi_pre.write_bytes(b"MThd-corrupt-but-exists")
+    notes_pre = tmp_path / "transcription.json"
+    notes_pre.write_text("{ this is not valid json")
+
+    _, _, notes, cached = transcribe_audio(str(sine_440_wav), output_dir=str(tmp_path))
+
+    assert cached is False, "corrupt cache must invalidate, not report cached=True"
+    assert mock_predict.called, "fall-through path must re-run predict"
+    assert len(notes) == 1
+    assert notes[0].pitch_midi == 60

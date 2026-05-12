@@ -114,3 +114,24 @@ async def test_jobs_transcribe_rejects_non_stem_path(sine_440_wav: Path) -> None
         )
     assert r.status_code == 400
     assert "stem file" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_jobs_transcribe_rejects_non_wav_extension(sine_440_wav: Path) -> None:
+    """resolve_job_context accepts any file under stems/<preset>/ regardless
+    of extension, so the handler also enforces a .wav suffix explicitly —
+    .mp3/.flac stems aren't part of the contract and would surprise callers
+    downstream."""
+    ws = srv.get_workspace()
+    # Stage an mp3 in the stem dir so the path passes resolve_job_context
+    # but trips the explicit extension check.
+    bad_path = ws.job_stems_dir("test-song", "medium") / "other.mp3"
+    bad_path.write_bytes(b"")  # contents don't matter — handler 400s pre-decode
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            "/jobs/transcribe", json={"audio_path": str(bad_path)}
+        )
+    assert r.status_code == 400
+    assert ".wav" in r.json()["detail"]

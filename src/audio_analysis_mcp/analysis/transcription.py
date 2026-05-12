@@ -10,9 +10,13 @@ from audio_analysis_mcp.schemas import NoteEvent
 
 
 ProgressFn: TypeAlias = Callable[[str, float, "str | None"], None]
-"""Caller-side progress callback. Stages: ``cache_hit | load_audio | predict |
-write | done``. ``detail`` is currently always ``None``; the parameter exists
-so the type matches the other tool ProgressFn signatures."""
+"""Caller-side progress callback. Stages on a fresh run:
+``load_audio | predict | write | done``. Stages on a cache hit: just
+``cache_hit`` (itself terminal — no separate ``done`` follows). This
+matches the structure-analysis pipeline's behavior so consumers can
+treat ``cache_hit`` and ``done`` interchangeably as terminal markers.
+``detail`` is currently always ``None``; the parameter exists so the
+type matches the other tool ProgressFn signatures."""
 
 
 def transcribe_audio(
@@ -43,15 +47,18 @@ def transcribe_audio(
     notes: list[NoteEvent]
 
     # Cache hit: MIDI already on disk. Re-hydrate the sidecar JSON so the
-    # return shape is identical to a fresh run.
+    # return shape is identical to a fresh run. A corrupt/unreadable
+    # JSON sidecar invalidates the cache — we'd rather pay the predict
+    # cost again than silently return an empty note list (which the MCP
+    # tool path surfaces as note_count=0, misleading the caller).
     if midi_path.exists() and notes_path.exists():
-        emit("cache_hit", 1.0)
         try:
             raw = json.loads(notes_path.read_text())
             notes = [NoteEvent(**n) for n in raw]
+            emit("cache_hit", 1.0)
+            return str(midi_path), str(notes_path), notes, True
         except Exception:
-            notes = []
-        return str(midi_path), str(notes_path), notes, True
+            pass  # fall through to a fresh predict run
 
     out.mkdir(parents=True, exist_ok=True)
     emit("load_audio", 0.05)
