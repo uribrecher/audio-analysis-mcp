@@ -99,6 +99,56 @@ def test_preset_passes_correct_args_to_apply_model(sine_440_wav: Path, tmp_path:
         assert kwargs["progress"] is True, f"{preset_name}: progress not enabled"
 
 
+def test_progress_monotonic_across_shifts_with_same_total(sine_440_wav: Path, tmp_path: Path):
+    """Three back-to-back tqdm bars on the same audio share a `total`. The
+    progress sink must still detect each new bar (via `current` resetting)
+    and emit a monotonically non-decreasing fraction — the previous
+    implementation looked for `total` changes and stuck at ~33% across all
+    three shifts.
+    """
+    model = _make_mock_model()
+    # htdemucs-shaped: 1 sub-model (model.models attr only present on bag-of-N
+    # variants; without it we fall back to 1). Combined with shifts=3 → 3 runs.
+    del model.models
+    sources_tensor = torch.zeros(1, 4, 2, 44100)
+
+    captured_fractions: list[float] = []
+
+    def progress(stage: str, fraction: float, detail: str | None) -> None:
+        captured_fractions.append(fraction)
+
+    TOTAL = 403  # same total for every bar — the case that broke before
+    def fake_apply_model(*args, **kwargs):
+        # Drive the installed sink with three bars at the same `total`.
+        from audio_analysis_mcp import _demucs_progress
+        sink = getattr(_demucs_progress._progress_sink, "sink", None)
+        assert sink is not None, "stem_separate_impl should install a sink before apply_model"
+        for _run in range(3):
+            for current in (10, 100, 200, TOTAL):
+                sink(current, TOTAL)
+        return sources_tensor
+
+    with patch("audio_analysis_mcp.tools.stem_separate.get_demucs_model", return_value=model), \
+         patch("audio_analysis_mcp.tools.stem_separate.apply_model", side_effect=fake_apply_model), \
+         patch("audio_analysis_mcp.tools.stem_separate.AudioFile", return_value=_make_mock_audio_file()), \
+         patch("audio_analysis_mcp.tools.stem_separate.save_audio", side_effect=_fake_save):
+        stem_separate_impl(
+            str(sine_440_wav), tmp_path / "medium", preset_name="medium", progress=progress,
+        )
+
+    # Pull only the "run" stage emissions (load_model / write / done land in
+    # different buckets and don't share the monotonic invariant we're testing).
+    run_fractions = captured_fractions[1:-2]  # drop the load_model / write / done bookends
+    # Monotonic non-decreasing across the whole run phase.
+    for prev, nxt in zip(run_fractions, run_fractions[1:]):
+        assert nxt + 1e-9 >= prev, f"progress regressed: {prev:.4f} -> {nxt:.4f}"
+    # The last run-phase emission should reach near the 0.95 ceiling, not get
+    # stuck at ~0.33 (which is the symptom the buggy implementation produced).
+    assert run_fractions[-1] > 0.9, (
+        f"progress topped out at {run_fractions[-1]:.4f}; counter never advanced across shifts"
+    )
+
+
 def test_different_presets_use_separate_cache(sine_440_wav: Path, tmp_path: Path):
     """Fast and medium presets should not share cache entries.
 

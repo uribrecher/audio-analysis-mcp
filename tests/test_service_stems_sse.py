@@ -96,6 +96,37 @@ async def test_jobs_stems_streams_progress_then_result(sine_440_wav: Path) -> No
 
 
 @pytest.mark.asyncio
+async def test_jobs_stems_releases_demucs_model_after_request(sine_440_wav: Path) -> None:
+    """Every /jobs/stems request must drop the cached Demucs model in its
+    `finally`, freeing the ~5GB the weights hold. We pre-seed
+    ``srv._demucs_models`` with a sentinel and assert it's gone afterward.
+    """
+    ws = srv.get_workspace()
+    source = ws.job_dir("test-song") / "source.wav"
+    shutil.copy(sine_440_wav, source)
+
+    sentinel = object()
+    saved = dict(srv._demucs_models)
+    srv._demucs_models["htdemucs_6s"] = sentinel  # the model name PRESETS["fast"].model resolves to
+    try:
+        transport = ASGITransport(app=app)
+        with patch(
+            "audio_analysis_mcp.service.app.stem_separate_impl",
+            side_effect=_fake_stem_impl,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/jobs/stems",
+                    json={"audio_path": str(source), "preset": "fast"},
+                )
+        assert r.status_code == 200
+        assert "htdemucs_6s" not in srv._demucs_models
+    finally:
+        srv._demucs_models.clear()
+        srv._demucs_models.update(saved)
+
+
+@pytest.mark.asyncio
 async def test_jobs_stems_rejects_invalid_preset() -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

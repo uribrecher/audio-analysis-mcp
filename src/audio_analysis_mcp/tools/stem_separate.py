@@ -123,17 +123,20 @@ def stem_separate_impl(
 
     # Demucs's `progress=True` creates one tqdm bar per run (= one per shift
     # per sub-model). The routing layer (audio_analysis_mcp._demucs_progress)
-    # forwards each tqdm `update` to the sink we install here. We count run
-    # transitions by watching `total` change between updates — tqdm reuses
-    # its `total` field per-bar, so a new total means a new run started.
+    # forwards each tqdm `update` to the sink we install here. We detect a
+    # new run by watching `current` reset to a lower value than the previous
+    # update — `total` is identical across runs on the same audio (e.g. all
+    # three bars at 403.65 for htdemucs_6s medium), so the previous
+    # total-change heuristic missed every boundary and the UI bar jumped
+    # backward at each new shift.
     completed_runs = 0
-    last_seen_total = 0
+    last_current = 0
 
     def _on_tqdm_update(current: int, total: int) -> None:
-        nonlocal completed_runs, last_seen_total
-        if total != last_seen_total and last_seen_total != 0:
+        nonlocal completed_runs, last_current
+        if current < last_current and last_current > 0:
             completed_runs += 1
-        last_seen_total = total
+        last_current = current
         run_progress = (current / total) if total else 0.0
         overall = (completed_runs + run_progress) / total_runs
         emit("run", 0.05 + 0.9 * overall, f"run {min(completed_runs + 1, total_runs)}/{total_runs}")
