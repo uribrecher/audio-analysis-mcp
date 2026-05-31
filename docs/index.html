@@ -4,35 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>audio-analysis-mcp — Sounds &amp; Recreation</title>
-<meta name="description" content="Python MCP server for audio analysis driving sound recreation — stem separation, spectrum, transcription, comparison.">
+<meta name="description" content="Python MCP server: stem separation, spectrum analysis, transcription, note isolation and comparison for AI-driven sound recreation.">
 <meta property="og:title" content="audio-analysis-mcp — Sounds &amp; Recreation">
 <meta property="og:description" content="Python MCP server for audio analysis driving sound recreation.">
 <meta property="og:image" content="https://uribrecher.github.io/sounds-and-recreation/assets/img/hero.png">
 <link rel="icon" href="site-assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="site-assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="site-assets/favicon-16.png">
-  <link rel="icon" type="image/svg+xml" href="site-assets/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="site-assets/favicon.svg">
 <link rel="apple-touch-icon" href="site-assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="site-assets/brand.css">
-<style>:root{--accent:#34cdbf}</style>
 </head>
-<body>
+<body style="--accent:#34cdbf;--accent-ink:#0d786e;--accent-soft:#d9f5f1">
 
 <nav class="nav">
-  <a class="brand" href="https://uribrecher.github.io/sounds-and-recreation/"><img src="site-assets/mark.webp" alt=""> Sounds &amp; Recreation</a>
+  <a class="brand" href="https://uribrecher.github.io/sounds-and-recreation/"><picture><source srcset="site-assets/mark.webp" type="image/webp"><img src="site-assets/mark.png" alt=""></picture> Sounds &amp; Recreation</a>
   <div class="nav-links">
     <a href="https://uribrecher.github.io/sounds-and-recreation/#repos">All repos</a>
     <a class="ghbtn" href="https://github.com/uribrecher/audio-analysis-mcp">★ GitHub</a>
   </div>
 </nav>
 
-<header class="repo-hero wrap">
-  <span class="lang">Python 3.11</span>
+<header class="hero wrap">
+  <div class="glow"></div>
+  <span class="lang">Python · MCP</span>
   <h1>audio-analysis-mcp</h1>
-  <p class="lead">A Python MCP server that imports, separates, analyzes, transcribes, and compares audio — the analysis tools an AI agent uses to figure out what a sound is made of.</p>
+  <p class="lead">A Python MCP server providing audio analysis tools for AI-driven sound recreation. It imports, separates, analyzes, and compares audio so an agent can configure hardware synthesizers to match a target sound.</p>
+  <div class="chips">
+    <span class="chip"><span class="dot"></span> Demucs stems</span>
+    <span class="chip"><span class="dot"></span> Basic Pitch transcription</span>
+    <span class="chip"><span class="dot"></span> Spectral + ADSR</span>
+  </div>
   <div class="cta">
     <a class="btn primary" href="https://github.com/uribrecher/audio-analysis-mcp">★ View on GitHub</a>
     <a class="btn ghost" href="https://github.com/uribrecher/audio-analysis-mcp#readme">Read the docs</a>
@@ -42,56 +47,52 @@
 <section class="section">
   <div class="wrap">
     <div class="label">What it does</div>
-    <h2>Hear what a sound is made of</h2>
-    <p class="sub">Separates stems with Demucs, profiles tone (spectrum, ADSR, modulation), transcribes notes with Basic Pitch, isolates and compares — so the agent can configure synths to match a target. GPL-3.0 (it builds on GPL components like vmo and cvxopt).</p>
+    <h2>Hear a sound, break it down</h2>
+    <p class="sub">A suite of MCP tools take a target track from import, through separation and analysis, to a side-by-side comparison with the synthesized result.</p>
     <div class="feat">
-      <div class="item"><strong>Import &amp; render</strong><br><code>import_audio</code>, <code>audio_render</code>, <code>audio_list_devices</code></div>
-      <div class="item"><strong>Stem separation</strong><br><code>stem_separate</code> (Demucs)</div>
-      <div class="item"><strong>Spectral analysis</strong><br><code>spectrum_analyze</code> — mel spectrogram, spectral features, ADSR, modulation</div>
-      <div class="item"><strong>Transcription</strong><br><code>note_transcribe</code> (Basic Pitch → MIDI), <code>note_triage</code>, <code>note_isolate</code></div>
-      <div class="item"><strong>Comparison</strong><br><code>audio_compare</code> — target vs. synthesized: mel distance, per-band energy</div>
-      <div class="item"><strong>FastMCP (stdio)</strong><br>Python 3.11, pinned for Basic Pitch's CoreML/TensorFlow stack.</div>
+      <div class="item"><strong>Import &amp; render</strong><div class="codes"><code>import_audio</code><code>audio_render</code><code>audio_list_devices</code></div></div>
+      <div class="item"><strong>Stem separation</strong><p>Split into vocals, drums, bass, other, guitar and piano with Demucs.</p><div class="codes" style="margin-top:8px"><code>stem_separate</code></div></div>
+      <div class="item"><strong>Spectrum &amp; envelope</strong><p>Mel spectrogram, spectral features, ADSR and modulation.</p><div class="codes" style="margin-top:8px"><code>spectrum_analyze</code></div></div>
+      <div class="item"><strong>Transcription</strong><p>Polyphonic transcription via Basic Pitch — MIDI plus note-event JSON.</p><div class="codes" style="margin-top:8px"><code>note_transcribe</code></div></div>
+      <div class="item"><strong>Note isolation</strong><div class="codes"><code>note_triage</code><code>note_isolate</code></div></div>
+      <div class="item"><strong>Compare</strong><p>Target vs. synthesized — mel spectrogram distance and per-band energy.</p><div class="codes" style="margin-top:8px"><code>audio_compare</code></div></div>
     </div>
-  </div>
-</section>
-
-<section class="section alt">
-  <div class="wrap">
-    <div class="label">Quickstart</div>
-    <h2>Up and running</h2>
-    <div class="code"><pre><span class="c"># install dependencies</span>
-uv sync --dev
-brew install portaudio        <span class="c"># required for audio_render (macOS)</span>
-
-<span class="c"># run the MCP server (stdio)</span>
-uv run python -m audio_analysis_mcp
-
-<span class="c"># tests</span>
-uv run pytest -v</pre></div>
   </div>
 </section>
 
 <section class="section">
+  <div class="wrap demo">
+    <div class="label">Setup</div>
+    <h2>Up and running</h2>
+    <p class="sub">Requires Python 3.11 and uv. <code style="background:#f1ead8;padding:2px 7px;border-radius:5px">audio_render</code> needs PortAudio; system capture uses BlackHole.</p>
+    <div class="term">
+      <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="t">~/audio-analysis-mcp</span></div>
+      <div class="body"><pre><span class="cmt"># install</span>
+uv sync --dev
+
+<span class="cmt"># macOS audio capture deps</span>
+brew install portaudio
+
+<span class="cmt"># run the MCP server (spawned by your client over stdio)</span>
+uv run python -m audio_analysis_mcp</pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt center">
   <div class="wrap">
-    <div class="label">In the pipeline</div>
-    <h2>Where it fits</h2>
+    <div class="label">Where it fits</div>
+    <h2>The ears of the pipeline</h2>
+    <p class="sub">audio-analysis-mcp turns a target recording into the features the agent reasons about.</p>
     <div class="flow">
       <span class="node">Audio</span>→<span class="node on">Analysis</span>→<span class="node">Agent</span>→<span class="node">MIDI</span>→<span class="node">Synth</span>
-    </div>
-    <p class="sub" style="margin-top:16px">audio-analysis-mcp is the ears — it turns raw audio into the features the agent reasons about.</p>
-    <div class="linkrow">
-      <a href="https://github.com/uribrecher/audio-analysis-mcp">GitHub</a>
-      <a href="https://github.com/uribrecher/audio-analysis-mcp/issues">Issues</a>
-      <a href="https://uribrecher.github.io/sounds-and-recreation/">← The collection</a>
     </div>
   </div>
 </section>
 
 <footer class="footer">
-  <div class="wrap">
-    <div class="brand"><img src="site-assets/mark.webp" alt=""> <span>Sounds &amp; Recreation</span></div>
-    Open-source audio recreation · GPL-3.0 · <a href="https://github.com/uribrecher">GitHub</a>
-  </div>
+  <div class="fb"><picture><source srcset="site-assets/mark.webp" type="image/webp"><img src="site-assets/mark.png" alt=""></picture> Sounds &amp; Recreation</div>
+  Open-source audio recreation · GPL-3.0 · <a href="https://github.com/uribrecher/audio-analysis-mcp">GitHub</a> · <a href="https://uribrecher.github.io/sounds-and-recreation/#repos">The collection</a>
 </footer>
 
 </body>
