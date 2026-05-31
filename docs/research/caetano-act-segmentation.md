@@ -3,7 +3,8 @@
 **Source:** Caetano, M., Burred, J. J., Rodet, X. *"Automatic Segmentation of the
 Temporal Evolution of Isolated Acoustic Musical Instrument Sounds Using
 Spectro-Temporal Cues."* Proc. DAFx-10, Graz, Austria, 2010. IRCAM
-Analysis/Synthesis Team. PDF: `docs/Caetano Segmentation DAFx2010.pdf`.
+Analysis/Synthesis Team. The paper is available from the
+[DAFx paper archive](https://www.dafx.de/paper-archive/) (not redistributed here).
 
 This note summarises the paper as background reading for a future redesign of
 `amplitude_analyze`. **No plan yet** — see "Why this matters" below for the

@@ -15,3 +15,9 @@ scratch/tone_gen_checkpoints/
 
 # IDE
 .idea/
+
+# Local-only training data / scratch artifacts (kept on disk, never committed)
+scratch/t11_smoke_check/
+*.pt
+.run/
+.env

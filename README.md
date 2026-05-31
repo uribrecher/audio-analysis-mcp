@@ -76,4 +76,7 @@ Run them directly with `uv run python scratch/<script>.py`.
 
 ## License
 
-See repository root for license information.
+Licensed under the GNU General Public License v3.0 (GPL-3.0-or-later). See [LICENSE](LICENSE).
+
+This project depends on GPL-licensed components (notably `vmo` and `cvxopt`, both
+GPLv3), so the combined work is distributed under the GPL.
