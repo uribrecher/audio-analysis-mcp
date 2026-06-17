@@ -25,6 +25,9 @@ dependencies = [
   "sse-starlette>=2.1",
 ]
 
+[project.scripts]
+audio-analysis-mcp = "audio_analysis_mcp.__main__:main"
+
 # Local dev override: edit ../SongFormer and see changes immediately.
 # CI passes `uv sync --no-sources` so the git URL above wins on the runner.
 [tool.uv.sources]
