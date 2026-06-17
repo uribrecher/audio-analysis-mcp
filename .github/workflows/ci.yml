@@ -43,8 +43,10 @@ jobs:
       # redirect) which doesn't exist on CI. The published wheel has no songformer dep
       # anyway, so the smoke env never needs it.
       - run: uv build --wheel --no-sources
-      # Outer env needs numpy/soundfile + the mcp client to drive the session.
-      - run: uv run --no-sources --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
+      # Outer driver needs only numpy/soundfile + the mcp client. --no-project skips
+      # syncing the project itself (which would install torch etc. unnecessarily) —
+      # the wheel's full deps are exercised by the inner `uvx --from <wheel>` instead.
+      - run: uv run --no-project --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
 
   audit:
     runs-on: ubuntu-latest
