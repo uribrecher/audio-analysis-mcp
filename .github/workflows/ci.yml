@@ -25,6 +25,9 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
-      - run: uv sync --dev
+      # --extra service: the service/ subpackage's tests + mypy run here, so its
+      # deps (fastapi/uvicorn/sse-starlette) must be installed even though they're
+      # an optional extra for end users.
+      - run: uv sync --dev --group research --extra service
       - run: uv run mypy src/
       - run: uv run pytest -m "not slow" -v

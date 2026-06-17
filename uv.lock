@@ -82,7 +82,6 @@ source = { editable = "." }
 dependencies = [
     { name = "basic-pitch" },
     { name = "demucs" },
-    { name = "fastapi" },
     { name = "jsonschema" },
     { name = "librosa" },
     { name = "mcp" },
@@ -90,14 +89,17 @@ dependencies = [
     { name = "pydantic" },
     { name = "referencing" },
     { name = "scipy" },
-    { name = "signalflow" },
-    { name = "songformer" },
     { name = "sounddevice" },
     { name = "soundfile" },
-    { name = "sse-starlette" },
     { name = "torch" },
     { name = "torchaudio" },
     { name = "torchcodec" },
+]
+
+[package.optional-dependencies]
+service = [
+    { name = "fastapi" },
+    { name = "sse-starlette" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -108,13 +110,17 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "songformer" },
+]
+research = [
+    { name = "signalflow" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "basic-pitch", specifier = ">=0.4.0" },
     { name = "demucs", specifier = ">=4.0.0" },
-    { name = "fastapi", specifier = ">=0.115" },
+    { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.115" },
     { name = "jsonschema", specifier = ">=4.21" },
     { name = "librosa", specifier = ">=0.10.0" },
     { name = "mcp", specifier = ">=1.0.0" },
@@ -122,16 +128,15 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "referencing", specifier = ">=0.30" },
     { name = "scipy", specifier = ">=1.10" },
-    { name = "signalflow", specifier = ">=0.4.0,<0.5.4" },
-    { name = "songformer", editable = "../SongFormer" },
     { name = "sounddevice", specifier = ">=0.4" },
     { name = "soundfile", specifier = ">=0.12" },
-    { name = "sse-starlette", specifier = ">=2.1" },
+    { name = "sse-starlette", marker = "extra == 'service'", specifier = ">=2.1" },
     { name = "torch", specifier = ">=2.0" },
     { name = "torchaudio", specifier = ">=2.0" },
     { name = "torchcodec", specifier = ">=0.1" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'service'", specifier = ">=0.30" },
 ]
+provides-extras = ["service"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -140,7 +145,9 @@ dev = [
     { name = "mypy", specifier = ">=1.10" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "songformer", git = "https://github.com/uribrecher/SongFormer.git?rev=v0.2.0" },
 ]
+research = [{ name = "signalflow", specifier = ">=0.4.0,<0.5.4" }]
 
 [[package]]
 name = "audioread"
@@ -2180,7 +2187,7 @@ wheels = [
 [[package]]
 name = "songformer"
 version = "0.2.0"
-source = { editable = "../SongFormer" }
+source = { git = "https://github.com/uribrecher/SongFormer.git?rev=v0.2.0#dfaf4f468ddf0bd27a15d990d1e0620346615066" }
 dependencies = [
     { name = "ema-pytorch" },
     { name = "huggingface-hub" },
@@ -2198,26 +2205,6 @@ dependencies = [
     { name = "tqdm" },
     { name = "transformers" },
     { name = "x-transformers" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ema-pytorch", specifier = ">=0.7" },
-    { name = "huggingface-hub" },
-    { name = "librosa", specifier = ">=0.11" },
-    { name = "loguru" },
-    { name = "msaf" },
-    { name = "muq", specifier = ">=0.1" },
-    { name = "numpy" },
-    { name = "omegaconf" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "safetensors" },
-    { name = "scipy" },
-    { name = "torch", specifier = ">=2.4" },
-    { name = "torchaudio", specifier = ">=2.4" },
-    { name = "tqdm" },
-    { name = "transformers", specifier = ">=4.51" },
-    { name = "x-transformers", specifier = ">=2.4" },
 ]
 
 [[package]]
