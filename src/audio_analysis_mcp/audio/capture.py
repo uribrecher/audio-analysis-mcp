@@ -6,8 +6,17 @@ import soundfile as sf
 
 
 def _get_sd() -> Any:
-    """Lazy-import sounddevice (requires PortAudio system library)."""
-    import sounddevice as sd
+    """Lazy-import sounddevice (requires the PortAudio system library)."""
+    try:
+        import sounddevice as sd
+    except (OSError, ImportError) as exc:
+        raise RuntimeError(
+            "audio_render / audio_list_devices require the PortAudio system "
+            "library. Install it (e.g. `brew install portaudio` on macOS) and, "
+            "for system-audio capture, BlackHole "
+            "(https://existential.audio/blackhole/). The other tools work "
+            "without it."
+        ) from exc
     return sd
 
 
