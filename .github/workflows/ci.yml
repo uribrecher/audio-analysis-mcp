@@ -39,6 +39,9 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
-      - run: uv build --wheel
+      # --no-sources: ignore [tool.uv.sources] (the songformer ../SongFormer editable
+      # redirect) which doesn't exist on CI. The published wheel has no songformer dep
+      # anyway, so the smoke env never needs it.
+      - run: uv build --wheel --no-sources
       # Outer env needs numpy/soundfile + the mcp client to drive the session.
-      - run: uv run --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
+      - run: uv run --no-sources --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
