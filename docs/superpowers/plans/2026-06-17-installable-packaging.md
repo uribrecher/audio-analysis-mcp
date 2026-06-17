@@ -16,7 +16,7 @@ These apply to every task. Exact values copied from the spec (`docs/superpowers/
 - **Published `Requires-Dist` MUST NOT contain:** `songformer` (or any `@ git+` direct reference), `signalflow`, `fastapi`, `uvicorn`, `sse-starlette`. The published wheel must have **zero direct-reference dependencies**.
 - **Distribution name == console-script name ==** `audio-analysis-mcp`.
 - **Canonical MCP client config** (must appear verbatim in the README): `{"mcpServers":{"audio-analysis-mcp":{"command":"uvx","args":["audio-analysis-mcp"]}}}`.
-- **Dev/CI sync command becomes:** `uv sync --dev --group research` (the `research` group holds `signalflow`, still needed by the not-yet-moved `tone_generation` tests — see #47).
+- **Dev/CI sync command becomes:** `uv sync --dev --group research --extra service` (the `research` group holds `signalflow` for the not-yet-moved `tone_generation` tests — see #47; `--extra service` installs the FastAPI deps that the `service/` tests + `mypy src/` require — established during Task 2 implementation).
 - **CI keeps** `UV_NO_SOURCES: "1"` and `TONE_GEN_SCHEMA_DIR` env exactly as today.
 - **`structure_analyze` graceful-error text** must name SongFormer, give the `uvx --with 'songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0' audio-analysis-mcp` opt-in, and disclose **MuQ weights are CC-BY-NC-4.0 (non-commercial)**.
 - **Git:** signed commits only; work stays on the worktree branch (`worktree-audio-mcp-packaging-spec`); never push to `main`. (Out of scope: publishing SongFormer to PyPI; the `service/` distribution; the training-pipeline move #47.)
