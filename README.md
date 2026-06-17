@@ -32,7 +32,7 @@ Requires [uv](https://docs.astral.sh/uv/) (which provisions Python 3.11 for you 
    }
    ```
 
-3. Restart the client. The 9 core tools work out of the box; two tools need optional deps (below).
+3. Restart the client. Most tools work out of the box; three need optional deps (below): `audio_render` and `audio_list_devices` need PortAudio, and `structure_analyze` needs SongFormer.
 
 ### Optional: `audio_render` (system-audio capture)
 

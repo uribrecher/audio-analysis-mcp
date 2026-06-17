@@ -31,7 +31,7 @@ def get_structure_pipeline() -> "SongFormerPipeline":
                 "structure_analyze requires SongFormer, which is not installed. "
                 "Enable it with: uvx --with "
                 "'songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0' "
-                "audio-analysis-mcp . Note: this pulls MuQ model weights licensed "
+                "audio-analysis-mcp. Note: this pulls MuQ model weights licensed "
                 "CC-BY-NC-4.0 (non-commercial use only)."
             ) from exc
 
