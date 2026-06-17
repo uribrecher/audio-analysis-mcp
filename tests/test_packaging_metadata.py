@@ -1,4 +1,5 @@
 # tests/test_packaging_metadata.py
+import re
 import subprocess
 import zipfile
 from email.parser import Parser
@@ -43,6 +44,15 @@ def test_service_extra_present(wheel_metadata: str) -> None:
 
 def test_core_keeps_essential_deps(wheel_metadata: str) -> None:
     msg = Parser().parsestr(wheel_metadata)
-    core = " ".join(r for r in (msg.get_all("Requires-Dist") or []) if "extra ==" not in r)
+    # Parse the package NAME (leading token) from each core Requires-Dist line and
+    # assert exact membership — a substring check would let "torch" match
+    # "torchaudio"/"torchcodec" even if torch itself were dropped.
+    names = set()
+    for r in msg.get_all("Requires-Dist") or []:
+        if "extra ==" in r:
+            continue
+        m = re.match(r"[A-Za-z0-9._-]+", r)
+        if m:
+            names.add(m.group(0).lower())
     for dep in ("mcp", "torch", "demucs", "librosa", "basic-pitch", "sounddevice"):
-        assert dep in core, f"core dep missing: {dep}"
+        assert dep in names, f"core dep missing: {dep}"

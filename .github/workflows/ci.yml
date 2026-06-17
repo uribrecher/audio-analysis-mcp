@@ -18,7 +18,7 @@ jobs:
       # Ignore [tool.uv.sources] (which redirects songformer to ../SongFormer
       # for local editable dev) for *every* uv invocation in this job — both
       # `uv sync` and the implicit auto-sync inside `uv run`. On CI we want
-      # the pinned git URL from project.dependencies.
+      # songformer to resolve from its pinned git URL in the dev dependency-group.
       UV_NO_SOURCES: "1"
     steps:
       - uses: actions/checkout@v4

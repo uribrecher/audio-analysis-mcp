@@ -32,7 +32,9 @@ service = [
 audio-analysis-mcp = "audio_analysis_mcp.__main__:main"
 
 # Local dev override: edit ../SongFormer and see changes immediately.
-# CI passes `uv sync --no-sources` so the git URL above wins on the runner.
+# On CI/release runners this override is disabled — UV_NO_SOURCES=1 in the
+# test-and-lint job, and the --no-sources flag in the build/smoke/audit jobs —
+# so songformer resolves from its git URL in the dev dependency-group instead.
 [tool.uv.sources]
 songformer = { path = "../SongFormer", editable = true }
 
