@@ -31,3 +31,14 @@ jobs:
       - run: uv sync --dev --group research --extra service
       - run: uv run mypy src/
       - run: uv run pytest -m "not slow" -v
+
+  packaging-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      - run: uv build --wheel
+      # Outer env needs numpy/soundfile + the mcp client to drive the session.
+      - run: uv run --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
