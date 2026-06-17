@@ -17,48 +17,55 @@ A Python MCP server providing audio analysis tools for AI-driven sound recreatio
 | `note_isolate` | Isolate a note from audio within a time-frequency box via STFT masking |
 | `amplitude_analyze` | Per-cluster ADSR analysis with cross-candidate consistency check (**not ready for production** — see `docs/TODO.md`) |
 
-## Setup
+## Install & run
 
-Requires Python 3.11 and [uv](https://docs.astral.sh/uv/). (Pinned to 3.11 because Basic Pitch requires CoreML/TensorFlow which doesn't support 3.12+.)
+Requires [uv](https://docs.astral.sh/uv/) (which provisions Python 3.11 for you — the pin matters: Basic Pitch needs CoreML/TensorFlow, which break on 3.12+).
 
-```bash
-uv sync --dev
-```
+1. Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2. Add this to your MCP client config:
 
-`audio_render` requires [PortAudio](https://www.portaudio.com/) on the system. On macOS:
+   ```json
+   {
+     "mcpServers": {
+       "audio-analysis-mcp": { "command": "uvx", "args": ["audio-analysis-mcp"] }
+     }
+   }
+   ```
 
-```bash
-brew install portaudio
-```
+3. Restart the client. Most tools work out of the box; three need optional deps (below): `audio_render` and `audio_list_devices` need PortAudio, and `structure_analyze` needs SongFormer.
 
-For system audio capture (not just microphone), install [BlackHole](https://existential.audio/blackhole/).
+### Optional: `audio_render` (system-audio capture)
 
-## Usage
+`audio_render` / `audio_list_devices` need [PortAudio](https://www.portaudio.com/) (`brew install portaudio` on macOS), plus [BlackHole](https://existential.audio/blackhole/) for system audio. Without them the server still runs; only those two tools error.
 
-The server communicates over stdio and is intended to be spawned by an MCP client:
+### Optional: `structure_analyze` (song-structure detection)
 
-```bash
-uv run python -m audio_analysis_mcp
-```
-
-MCP client configuration:
+Needs SongFormer. Enable it by adding it to the run:
 
 ```json
 {
   "mcpServers": {
     "audio-analysis-mcp": {
-      "command": "/path/to/audio-analysis-mcp/.venv/bin/python",
-      "args": ["-m", "audio_analysis_mcp"]
+      "command": "uvx",
+      "args": ["--with", "songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0", "audio-analysis-mcp"]
     }
   }
 }
 ```
 
+> **License note:** this pulls MuQ model weights licensed **CC-BY-NC-4.0 (non-commercial use only)**. SongFormer's own code/weights are CC-BY-4.0 (ASLP-lab/NPU).
+
+### FastAPI service mode
+
+The HTTP `/jobs/*` service is an optional extra: `uvx --from 'audio-analysis-mcp[service]' python -m audio_analysis_mcp.service`.
+
 ## Development
 
 ```bash
-uv run pytest -v       # Run tests
-uv run mypy src/       # Type check
+uv sync --dev --group research --extra service   # dev tools + signalflow (tone_generation tests)
+uv run pytest -m "not slow"       # fast suite (CI default)
+uv run mypy src/                  # type check
+uv run python -m audio_analysis_mcp  # run the stdio server from source
 ```
 
 ## Scratch tools

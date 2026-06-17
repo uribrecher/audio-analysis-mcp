@@ -18,13 +18,57 @@ jobs:
       # Ignore [tool.uv.sources] (which redirects songformer to ../SongFormer
       # for local editable dev) for *every* uv invocation in this job — both
       # `uv sync` and the implicit auto-sync inside `uv run`. On CI we want
-      # the pinned git URL from project.dependencies.
+      # songformer to resolve from its pinned git URL in the dev dependency-group.
       UV_NO_SOURCES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
-      - run: uv sync --dev
+      # --extra service: the service/ subpackage's tests + mypy run here, so its
+      # deps (fastapi/uvicorn/sse-starlette) must be installed even though they're
+      # an optional extra for end users.
+      - run: uv sync --dev --group research --extra service
       - run: uv run mypy src/
       - run: uv run pytest -m "not slow" -v
+
+  packaging-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      # --no-sources: ignore [tool.uv.sources] (the songformer ../SongFormer editable
+      # redirect) which doesn't exist on CI. The published wheel has no songformer dep
+      # anyway, so the smoke env never needs it.
+      - run: uv build --wheel --no-sources
+      # Outer driver needs only numpy/soundfile + the mcp client. --no-project skips
+      # syncing the project itself (which would install torch etc. unnecessarily) —
+      # the wheel's full deps are exercised by the inner `uvx --from <wheel>` instead.
+      - run: uv run --no-project --with numpy --with soundfile --with mcp python scripts/smoke_packaging.py --expect-no-portaudio
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      # Audit the shipped (core) dependency closure for known CVEs. --no-dev keeps it
+      # to production deps (what `uvx audio-analysis-mcp` installs). The gate is
+      # BLOCKING — any new vuln fails CI. The ignored IDs below are transitive CVEs
+      # with no compatible upstream fix, pinned by basic-pitch/torch, and not
+      # exploitable here (the tool only loads its own bundled models):
+      #   - CVE-2025-3000: torch — no fixed release yet.
+      #   - keras 2.15.0 (Linux-only, via basic-pitch -> tensorflow): fixes require
+      #     keras 3.x, incompatible with the pinned tensorflow. Revisit if basic-pitch
+      #     gains an ONNX/TFLite backend or a newer-tensorflow release.
+      - run: >-
+          uv run --no-sources --no-dev --with pip-audit pip-audit
+          --ignore-vuln CVE-2025-3000
+          --ignore-vuln PYSEC-2025-121
+          --ignore-vuln PYSEC-2025-76
+          --ignore-vuln CVE-2025-12058
+          --ignore-vuln CVE-2025-12060
+          --ignore-vuln CVE-2026-1462

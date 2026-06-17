@@ -24,7 +24,16 @@ def get_workspace() -> Workspace:
 def get_structure_pipeline() -> "SongFormerPipeline":
     global _structure_pipeline
     if _structure_pipeline is None:
-        from songformer import SongFormerPipeline
+        try:
+            from songformer import SongFormerPipeline
+        except ImportError as exc:
+            raise RuntimeError(
+                "structure_analyze requires SongFormer, which is not installed. "
+                "Enable it with: uvx --with "
+                "'songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0' "
+                "audio-analysis-mcp. Note: this pulls MuQ model weights licensed "
+                "CC-BY-NC-4.0 (non-commercial use only)."
+            ) from exc
 
         _structure_pipeline = SongFormerPipeline.from_pretrained()
     return _structure_pipeline

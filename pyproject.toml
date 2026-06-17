@@ -2,6 +2,7 @@
 name = "audio-analysis-mcp"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
+readme = "README.md"
 dependencies = [
   "mcp>=1.0.0",
   "demucs>=4.0.0",
@@ -15,18 +16,25 @@ dependencies = [
   "sounddevice>=0.4",
   "pydantic>=2.0",
   "basic-pitch>=0.4.0",
-  # signalflow ceiling: 0.5.4 ships no macOS wheel — revisit when upstream publishes one.
-  "signalflow>=0.4.0,<0.5.4",
   "jsonschema>=4.21",
   "referencing>=0.30",
-  "songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0",
+]
+
+[project.optional-dependencies]
+# FastAPI service mode (service/ subpackage). Not needed for the stdio MCP server.
+service = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
   "sse-starlette>=2.1",
 ]
 
+[project.scripts]
+audio-analysis-mcp = "audio_analysis_mcp.__main__:main"
+
 # Local dev override: edit ../SongFormer and see changes immediately.
-# CI passes `uv sync --no-sources` so the git URL above wins on the runner.
+# On CI/release runners this override is disabled — UV_NO_SOURCES=1 in the
+# test-and-lint job, and the --no-sources flag in the build/smoke/audit jobs —
+# so songformer resolves from its git URL in the dev dependency-group instead.
 [tool.uv.sources]
 songformer = { path = "../SongFormer", editable = true }
 
@@ -37,15 +45,21 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.24",
   "httpx>=0.27",
+  # Dev-only: structure_analyze typecheck + e2e. Published wheel never includes it
+  # (dependency-groups are not part of distribution metadata). End users opt in via
+  # `uvx --with`. [tool.uv.sources] redirects this to ../SongFormer for local editable
+  # dev; CI sets UV_NO_SOURCES=1 so the pinned git URL wins.
+  "songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0",
+]
+# Training-only (tone_generation renderer). Leaves the published package entirely.
+# Temporary home until #47 moves the training pipeline to reverse-synth-research.
+research = [
+  "signalflow>=0.4.0,<0.5.4",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-# Allow `songformer @ git+https://...` in [project.dependencies].
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m not slow')"]
