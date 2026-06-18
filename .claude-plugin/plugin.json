@@ -1,6 +1,6 @@
 {
   "name": "audio-analysis-mcp",
-  "description": "Audio analysis tools for AI-driven sound recreation: import and normalize audio, separate stems (Demucs), analyze spectrum/ADSR/modulation, transcribe notes (Basic Pitch), isolate notes, and compare a target against a synthesized take. Runs locally via `uvx audio-analysis-mcp`; `stem_separate` downloads its Demucs model on first use, and the optional `audio_render` capture tool needs PortAudio.",
+  "description": "Audio analysis tools for AI-driven sound recreation: import and normalize audio, separate stems (Demucs), analyze spectrum/ADSR/modulation, transcribe notes (Basic Pitch), isolate notes, and compare a target against a synthesized take. Runs locally via `uvx audio-analysis-mcp`; `stem_separate` downloads its Demucs model on first use, and the optional `audio_render` capture tool needs PortAudio (plus a virtual device such as BlackHole for system-audio capture on macOS).",
   "version": "0.1.0",
   "author": {
     "name": "Uri Brecher",
