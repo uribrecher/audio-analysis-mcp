@@ -1,0 +1,31 @@
+{
+  "name": "audio-analysis-mcp",
+  "description": "Audio analysis tools for AI-driven sound recreation: import and normalize audio, separate stems (Demucs), analyze spectrum/ADSR/modulation, transcribe notes (Basic Pitch), isolate notes, and compare a target against a synthesized take. Runs locally via `uvx audio-analysis-mcp`; `stem_separate` downloads its Demucs model on first use, and the optional `audio_render` capture tool needs PortAudio.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Uri Brecher",
+    "url": "https://github.com/uribrecher"
+  },
+  "homepage": "https://uribrecher.github.io/audio-analysis-mcp/",
+  "repository": "https://github.com/uribrecher/audio-analysis-mcp",
+  "license": "GPL-3.0-or-later",
+  "keywords": [
+    "mcp",
+    "audio",
+    "audio-analysis",
+    "music",
+    "demucs",
+    "stem-separation",
+    "basic-pitch",
+    "transcription",
+    "spectrum"
+  ],
+  "mcpServers": {
+    "audio-analysis-mcp": {
+      "command": "uvx",
+      "args": [
+        "audio-analysis-mcp@0.1.0"
+      ]
+    }
+  }
+}
