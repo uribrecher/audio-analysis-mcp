@@ -22,10 +22,12 @@ requests unless you run it offline.
 - **Demucs stem-separation model — `stem_separate`.** The first time you run
   `stem_separate`, the Demucs library downloads its pretrained model weights
   from Meta's public file host (`https://dl.fbaipublicfiles.com/demucs/`) and
-  caches them in your local Torch hub cache
-  (`~/.cache/torch/hub/checkpoints/`). Subsequent runs use the cache and make
-  no network calls. No audio or personal data is sent — this is an outbound
-  download only.
+  caches them in your local Torch hub cache (by default
+  `~/.cache/torch/hub/checkpoints/`, configurable via `TORCH_HOME` and
+  platform-dependent). Once cached, later runs load the weights from disk
+  without re-downloading; a download recurs only if the cache is missing or
+  cleared. No audio or personal data is sent — this is an outbound download
+  only.
 
 - **Note-transcription model — `note_transcribe`.** No download. The Basic
   Pitch model ships **bundled inside the installed package**, so
@@ -42,7 +44,8 @@ requests unless you run it offline.
   (`OpenMuQ/MuQ-large-msd-iter`, a `facebook/wav2vec2-conformer-rope-large-960h-ft`
   config, and the `minzwon/MusicFM` / `ASLP-lab/SongFormer` weights fetched by
   its `songformer-download` setup step), cached under your Hugging Face cache
-  (`~/.cache/huggingface/`). Note that the MuQ weights
+  (by default `~/.cache/huggingface/`, configurable via `HF_HOME` /
+  `HUGGINGFACE_HUB_CACHE` and platform-dependent). Note that the MuQ weights
   (`OpenMuQ/MuQ-large-msd-iter`) are licensed CC-BY-NC-4.0 (non-commercial).
   These transfers send no audio or personal data — they fetch model weights and,
   via the Hugging Face client, may also make version/metadata requests.
