@@ -6,12 +6,16 @@ can help recreate a sound. The audio you give it, and every file it produces,
 stay on your machine — they are never uploaded anywhere.
 
 It performs **no analytics, telemetry, tracking, or usage reporting**, and it
-does not collect, store, or share personal data. (Verified by source scan: the
-shipped server makes no outbound calls of its own.)
+does not transmit or share your data with the author or any third party.
+(Verified by source scan: the shipped server makes no outbound calls of its
+own.) The audio you import and the files it generates *are* written to a local
+workspace on your machine — that is the only place your data is stored.
 
-The only network access in normal use is **one-time downloads of open ML model
-weights**, described below. Once a model is cached locally, it is never fetched
-again.
+The only network access in normal use is downloading **ML model weights**,
+described below. These are cached locally and reused, so in normal operation a
+model is not downloaded again — though the Hugging Face client used by the
+optional SongFormer component may still make lightweight version/metadata
+requests unless you run it offline.
 
 ## First-run model downloads
 
@@ -34,12 +38,14 @@ again.
   `uvx audio-analysis-mcp`. Out of the box, `structure_analyze` returns a
   graceful "not installed" error and makes **no network calls**. If you
   explicitly opt in by installing the optional `songformer` dependency, then on
-  first use it downloads open model weights from the Hugging Face Hub
+  first use it downloads model weights from the Hugging Face Hub
   (`OpenMuQ/MuQ-large-msd-iter`, a `facebook/wav2vec2-conformer-rope-large-960h-ft`
   config, and the `minzwon/MusicFM` / `ASLP-lab/SongFormer` weights fetched by
   its `songformer-download` setup step), cached under your Hugging Face cache
-  (`~/.cache/huggingface/`). As with Demucs, these are downloads only — no audio
-  or personal data is uploaded.
+  (`~/.cache/huggingface/`). Note that the MuQ weights
+  (`OpenMuQ/MuQ-large-msd-iter`) are licensed CC-BY-NC-4.0 (non-commercial).
+  These transfers send no audio or personal data — they fetch model weights and,
+  via the Hugging Face client, may also make version/metadata requests.
 
 ## Optional system dependencies (local only)
 
