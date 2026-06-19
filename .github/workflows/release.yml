@@ -23,6 +23,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       UV_NO_SOURCES: "1"           # ignore the ../SongFormer editable redirect on CI
+      CZ_SPEC: "commitizen>=4.0"   # single source for the cz pin; quoted at every shell use site
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,7 +43,7 @@ jobs:
 
       - name: Read current version
         id: cur
-        run: echo "version=$(uv run --no-project --with 'commitizen>=4.0' cz version --project)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(uv run --no-project --with "$CZ_SPEC" cz version --project)" >> "$GITHUB_OUTPUT"
 
       - name: Is the current version already tagged?
         id: tagged
@@ -68,7 +69,6 @@ jobs:
         if: steps.tagged.outputs.value == 'true'
         run: |
           git checkout -B release/next
-          CZ_SPEC="commitizen>=4.0"   # quoted at every use so '>=' is never shell redirection
           set +e
           uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog  # adjust per Step 1 if needed
           code=$?
@@ -83,8 +83,9 @@ jobs:
           git commit -m "chore(release): v$W"
           git push -f origin release/next
           BODY="Automated release prepared by \`cz bump\`. Merging tags **v$W**; \`publish.yml\` then publishes to PyPI after the \`pypi\` environment approval. Generated — do not edit by hand."
-          if gh pr view release/next --json number >/dev/null 2>&1; then
-            gh pr edit release/next --title "chore(release): v$W" --body "$BODY"
+          PR_NUM="$(gh pr list --head release/next --state open --json number --jq '.[0].number')"
+          if [ -n "$PR_NUM" ]; then
+            gh pr edit "$PR_NUM" --title "chore(release): v$W" --body "$BODY"
           else
             gh pr create --base main --head release/next --title "chore(release): v$W" --body "$BODY"
           fi
