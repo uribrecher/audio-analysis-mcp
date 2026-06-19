@@ -69,6 +69,7 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.24",
   "httpx>=0.27",
+  "commitizen>=4.0",
   # Dev-only: structure_analyze typecheck + e2e. Published wheel never includes it
   # (dependency-groups are not part of distribution metadata). End users opt in via
   # `uvx --with`. [tool.uv.sources] redirects this to ../SongFormer for local editable
@@ -88,6 +89,13 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m not slow')"]
 asyncio_mode = "auto"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"        # reads/writes [project].version
+tag_format = "v$version"            # must match publish.yml tags: ["v*"] + the PyPI trusted publisher
+update_changelog_on_bump = true
+major_version_zero = true           # stay in 0.x; breaking changes bump minor until a deliberate 1.0
 
 [tool.mypy]
 python_version = "3.11"

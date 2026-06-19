@@ -1,0 +1,33 @@
+# .github/workflows/pr-title.yml
+# Validates ONLY the PR title against Conventional Commits. The repo squash-merges, so the PR
+# title becomes the commit on main that `cz bump` reads. Individual branch commits are unconstrained.
+name: PR title
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:                       # job id == required-status-check context "pr-title"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Only `feat` (minor) and `fix` (patch) — plus `!`/`BREAKING CHANGE` — bump the version
+          # under cz_conventional_commits. The rest are accepted but produce NO release.
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            perf
+            test
+            build
+            ci
+            style
+            revert
