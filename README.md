@@ -67,7 +67,7 @@ The HTTP `/jobs/*` service is an optional extra: `uvx --from 'audio-analysis-mcp
 ## Development
 
 ```bash
-uv sync --dev --group research --extra service   # dev tools + signalflow (tone_generation tests)
+uv sync --dev --extra service   # dev tools + service deps
 uv run pytest -m "not slow"       # fast suite (CI default)
 uv run mypy src/                  # type check
 uv run python -m audio_analysis_mcp  # run the stdio server from source

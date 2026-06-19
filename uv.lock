@@ -122,9 +122,6 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "songformer" },
 ]
-research = [
-    { name = "signalflow" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -158,7 +155,6 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "songformer", git = "https://github.com/uribrecher/SongFormer.git?rev=v0.2.0" },
 ]
-research = [{ name = "signalflow", specifier = ">=0.4.0,<0.5.4" }]
 
 [[package]]
 name = "audioread"
@@ -2236,20 +2232,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
-]
-
-[[package]]
-name = "signalflow"
-version = "0.5.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/6c/d98466409fe096941313b8b557e8cf00927b51c12836f0e8d591c2be92af/signalflow-0.5.3-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:b2006bad95ada7cc8e01dd83e9dee2f7da31c455205a8ba34a729f0cf3562025", size = 2292430, upload-time = "2025-03-31T13:37:51.279Z" },
-    { url = "https://files.pythonhosted.org/packages/d9/80/7cf3bb87608014507595cdcfb36321447ea27326d260f1f805bc82bc8492/signalflow-0.5.3-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:e24faafde5f33e0ade97b5903804261071e3fe5561539cf338acb49e6fd47e12", size = 2511623, upload-time = "2025-03-31T13:37:53.591Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/b2/c5b5e67b0cf061284435098cf7a6d0375badc5e720127060b31071950a6b/signalflow-0.5.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c990118ff1d6c2fcb2954ad63774a35071a90be737285e20116f5e97a5dfc34c", size = 2969794, upload-time = "2025-03-31T11:22:47.052Z" },
-    { url = "https://files.pythonhosted.org/packages/bf/00/76a75015e732aea8c1724bc51c335f379e9dbaa0388410d2d861ee3af0aa/signalflow-0.5.3-cp311-cp311-manylinux_2_34_aarch64.whl", hash = "sha256:ed197c6d704c5aa6417cc58b88609fcab2d2faeb929dfd96bb3d68cf22484adb", size = 3771631, upload-time = "2025-03-30T10:56:01.605Z" },
 ]
 
 [[package]]

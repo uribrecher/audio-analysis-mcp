@@ -76,11 +76,6 @@ dev = [
   # dev; CI sets UV_NO_SOURCES=1 so the pinned git URL wins.
   "songformer @ git+https://github.com/uribrecher/SongFormer.git@v0.2.0",
 ]
-# Training-only (tone_generation renderer). Leaves the published package entirely.
-# Temporary home until #47 moves the training pipeline to reverse-synth-research.
-research = [
-  "signalflow>=0.4.0,<0.5.4",
-]
 
 [build-system]
 requires = ["hatchling"]
@@ -112,7 +107,6 @@ module = [
   "tqdm.*",
   "basic_pitch.*",
   "pretty_midi.*",
-  "signalflow.*",
   "jsonschema.*",
   "referencing.*",
   "songformer.*",

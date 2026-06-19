@@ -5,7 +5,7 @@ Python MCP server providing audio analysis tools for sound recreation.
 ## Quick Reference
 
 ```bash
-uv sync --dev --group research --extra service   # Install dev + research (signalflow) deps
+uv sync --dev --extra service   # Install dev + service deps
 uv run pytest -v           # Run all tests
 uv run mypy src/           # Type check
 uv run python -m audio_analysis_mcp  # Run MCP server (stdio)
