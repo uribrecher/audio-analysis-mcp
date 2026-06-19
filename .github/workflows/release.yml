@@ -70,7 +70,9 @@ jobs:
         run: |
           git checkout -B release/next
           set +e
-          uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog  # adjust per Step 1 if needed
+          # files-only: bump version + regenerate CHANGELOG without committing/tagging. Exits
+          # non-zero (21, [NO_COMMITS_TO_BUMP]) when no feat/fix accumulated since the last tag.
+          uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog
           code=$?
           set -e
           if [ "$code" -ne 0 ]; then
