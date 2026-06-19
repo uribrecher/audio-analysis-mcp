@@ -73,6 +73,26 @@ uv run mypy src/                  # type check
 uv run python -m audio_analysis_mcp  # run the stdio server from source
 ```
 
+## Releases
+
+Versioning and the changelog are **derived from Conventional Commits** by
+[Commitizen](https://commitizen-tools.github.io/commitizen/) — never hand-edited. Because the repo
+squash-merges, **the PR title is the release signal** and is gated by the `pr-title` check
+(`feat:` → minor, `fix:` → patch; `docs:`/`chore:`/etc. → no release). We stay in `0.x`
+(`major_version_zero`).
+
+**Normal flow (automatic):**
+1. Merge feature PRs with Conventional-Commit titles.
+2. When `feat:`/`fix:` have accumulated, `release.yml` opens/updates a **`chore(release): vX.Y.Z`**
+   PR that bumps `[project].version` and regenerates `CHANGELOG.md`.
+3. Merge that release PR (admins bypass the ruleset to merge the bot PR). `release.yml` then tags
+   `vX.Y.Z` and dispatches `publish.yml`.
+4. Approve the **`pypi`** environment deployment. `publish.yml` builds and publishes to PyPI via
+   Trusted Publishing.
+
+**Manual escape hatch:** `uv run cz bump` locally (bumps version + changelog + tag), then
+`git push --follow-tags` — the pushed tag fires `publish.yml` directly.
+
 ## Scratch tools
 
 The `scratch/` directory holds ad-hoc Python scripts used during research and
