@@ -110,13 +110,24 @@ tagged and `cz bump` from `vV` sees only the `chore(release)` commit → no new 
 
 ### 6. Repo settings (via `gh api`, after spec approval)
 
-- `squash_merge_commit_title = PR_TITLE`, `squash_merge_commit_message = PR_BODY` — the validated PR
-  title becomes the `main` commit subject `cz` reads; the PR body becomes the commit body (clean
-  changelog bodies + `BREAKING CHANGE:` footer support).
-- `allow_merge_commit = false`, `allow_rebase_merge = false` — squash is the only merge path, so the
-  title gate can't be bypassed.
-- `main` branch protection: require the `pr-title` check (alongside existing CI checks).
-- `pypi` environment: add `uribrecher` as a **required reviewer**.
+`main` is governed by an existing **repository ruleset** (id `15346518`), not classic branch
+protection. It already enforces: **squash-only merges**, signed commits, linear history, 1 review +
+thread resolution, and the CI checks (`test-and-lint`, `audit`, `packaging-smoke`). **Repository
+admins bypass the ruleset `always`** (`actor_id: 5`). Changes:
+
+- `squash_merge_commit_title = PR_TITLE`, `squash_merge_commit_message = PR_BODY` (repo setting) —
+  the validated PR title becomes the `main` commit subject `cz` reads; the PR body becomes the
+  commit body (clean changelog bodies + `BREAKING CHANGE:` footer support). Squash-only is already
+  ruleset-enforced, so disabling merge/rebase at the repo level is optional cleanup only.
+- Add `pr-title` to the ruleset's `required_status_checks` (alongside the existing CI contexts).
+- `pypi` environment: add `uribrecher` (id `695383`) as a **required reviewer**.
+
+**Bot release-PR + required checks (resolved):** a PR opened by the Actions bot via `GITHUB_TOKEN`
+does **not** trigger `pull_request` workflows, so `pr-title`/CI never report on the release PR and a
+required-check rule would normally block it. The existing **admin bypass** resolves this cleanly:
+the maintainer merges the bot's release PR using their ruleset bypass (the deliberate release
+action). No PAT or GitHub App is introduced. The release PR title (`chore(release): vX.Y.Z`) is
+valid-by-construction, so the gate adds no value there anyway.
 
 ### 7. Docs
 
