@@ -1,0 +1,90 @@
+# .github/workflows/release.yml
+# Commit-derived releases. On push to main:
+#   Path A: [project].version has no matching tag  -> a release PR just merged -> tag + dispatch publish.yml
+#   Path B: version already tagged                 -> if feat/fix accumulated, open/update the release PR
+# The Actions bot uses only GITHUB_TOKEN; the maintainer merges the bot's release PR via admin bypass.
+name: Release
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # push the release branch + version tag
+  pull-requests: write   # open/update the release PR
+  actions: write         # dispatch publish.yml (workflow_dispatch)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UV_NO_SOURCES: "1"           # ignore the ../SongFormer editable redirect on CI
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      # Run cz from an ephemeral env (no project install → no torch/songformer). Pin matches the
+      # dev-group floor so CI and local `cz` behave identically.
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Read current version
+        id: cur
+        run: echo "version=$(uv run --no-project --with 'commitizen>=4.0' cz version --project)" >> "$GITHUB_OUTPUT"
+
+      - name: Is the current version already tagged?
+        id: tagged
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.cur.outputs.version }}" >/dev/null; then
+            echo "value=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Path A: release commit merged (version present, tag missing) → tag + publish ──
+      - name: Tag release and dispatch publish
+        if: steps.tagged.outputs.value == 'false'
+        run: |
+          V="v${{ steps.cur.outputs.version }}"
+          git tag -a "$V" -m "$V"
+          git push origin "$V"
+          gh workflow run publish.yml --ref "$V"
+          echo "Tagged $V and dispatched publish.yml"
+
+      # ── Path B: version already tagged → open/update the release PR if a bump is due ──
+      - name: Prepare or update the release PR
+        if: steps.tagged.outputs.value == 'true'
+        run: |
+          git checkout -B release/next
+          CZ_SPEC="commitizen>=4.0"   # quoted at every use so '>=' is never shell redirection
+          set +e
+          uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog  # adjust per Step 1 if needed
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "No bump-eligible commits since v${{ steps.cur.outputs.version }}; closing any stale release PR."
+            gh pr close release/next --delete-branch 2>/dev/null || true
+            exit 0
+          fi
+          W="$(uv run --no-project --with "$CZ_SPEC" cz version --project)"
+          git add -A
+          git commit -m "chore(release): v$W"
+          git push -f origin release/next
+          BODY="Automated release prepared by \`cz bump\`. Merging tags **v$W**; \`publish.yml\` then publishes to PyPI after the \`pypi\` environment approval. Generated — do not edit by hand."
+          if gh pr view release/next --json number >/dev/null 2>&1; then
+            gh pr edit release/next --title "chore(release): v$W" --body "$BODY"
+          else
+            gh pr create --base main --head release/next --title "chore(release): v$W" --body "$BODY"
+          fi
