@@ -43,7 +43,9 @@ jobs:
 
       - name: Read current version
         id: cur
-        run: echo "version=$(uv run --no-project --with "$CZ_SPEC" cz version --project)" >> "$GITHUB_OUTPUT"
+        run: |
+          V="$(uv run --no-project --with "$CZ_SPEC" cz version --project)"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Is the current version already tagged?
         id: tagged
@@ -73,15 +75,22 @@ jobs:
         run: |
           git checkout -B release/next
           set +e
-          # files-only: bump version + regenerate CHANGELOG without committing/tagging. Exits
-          # non-zero (21, [NO_COMMITS_TO_BUMP]) when no feat/fix accumulated since the last tag.
-          uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog
+          # files-only: bump version + regenerate CHANGELOG without committing/tagging.
+          OUT="$(uv run --no-project --with "$CZ_SPEC" cz bump --yes --files-only --changelog 2>&1)"
           code=$?
           set -e
+          echo "$OUT"
           if [ "$code" -ne 0 ]; then
-            echo "No bump-eligible commits since v${{ steps.cur.outputs.version }}; closing any stale release PR."
-            gh pr close release/next --delete-branch 2>/dev/null || true
-            exit 0
+            # cz exits 21 / [NO_COMMITS_TO_BUMP] when no feat/fix accumulated since the last tag —
+            # the expected "no release" case. Any OTHER non-zero exit is a real failure (bad config,
+            # network, dependency fetch, …) and must NOT be swallowed as "nothing to release".
+            if [ "$code" -eq 21 ] || printf '%s' "$OUT" | grep -q '\[NO_COMMITS_TO_BUMP\]'; then
+              echo "No bump-eligible commits since v${{ steps.cur.outputs.version }}; closing any stale release PR."
+              gh pr close release/next --delete-branch 2>/dev/null || true
+              exit 0
+            fi
+            echo "::error::cz bump failed (exit $code) — see output above"
+            exit "$code"
           fi
           W="$(uv run --no-project --with "$CZ_SPEC" cz version --project)"
           git add -A
