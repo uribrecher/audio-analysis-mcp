@@ -1,4 +1,8 @@
-## Unreleased
+## v0.1.1 (2026-06-19)
+
+### Refactor
+
+- remove tone-generation training pipeline + signalflow dep (#61)
 
 ## v0.1.0 (2026-06-17)
 

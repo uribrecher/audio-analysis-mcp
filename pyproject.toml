@@ -1,6 +1,6 @@
 [project]
 name = "audio-analysis-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Audio analysis MCP server: stem separation, transcription, spectrum, and comparison for AI-driven sound recreation."
 requires-python = ">=3.11,<3.12"
 readme = "README.md"
