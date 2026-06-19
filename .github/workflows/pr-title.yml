@@ -17,6 +17,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Only `feat` (minor) and `fix` (patch) — plus `!`/`BREAKING CHANGE` — bump the version
+          # under cz_conventional_commits. The rest are accepted but produce NO release.
           types: |
             feat
             fix

@@ -63,6 +63,9 @@ jobs:
           git push origin "$V"
           gh workflow run publish.yml --ref "$V"
           echo "Tagged $V and dispatched publish.yml"
+          # Recovery: if the tag pushed but this dispatch failed (transient API error), the
+          # version is now tagged so re-runs take Path B. Re-publish manually with:
+          #   gh workflow run publish.yml --ref "$V"
 
       # ── Path B: version already tagged → open/update the release PR if a bump is due ──
       - name: Prepare or update the release PR
