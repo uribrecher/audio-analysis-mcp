@@ -2,7 +2,8 @@
 name: Publish to PyPI
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*"]      # manual escape hatch: `cz bump` locally then `git push --follow-tags`
+  workflow_dispatch:  # release.yml dispatches this (GITHUB_TOKEN-pushed tags don't fire push:tags)
 
 jobs:
   build:
