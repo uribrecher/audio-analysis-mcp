@@ -21,6 +21,11 @@ dependencies = [
   "referencing>=0.30",
 ]
 
+[project.urls]
+Homepage = "https://uribrecher.github.io/audio-analysis-mcp/"
+Repository = "https://github.com/uribrecher/audio-analysis-mcp"
+Issues = "https://github.com/uribrecher/audio-analysis-mcp/issues"
+
 [project.optional-dependencies]
 # FastAPI service mode (service/ subpackage). Not needed for the stdio MCP server.
 service = [
