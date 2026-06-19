@@ -1,6 +1,6 @@
 # audio-analysis-mcp
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/uribrecher/audio-analysis-mcp?style=flat&logo=github)](https://github.com/uribrecher/audio-analysis-mcp/stargazers)
 
 A Python MCP server providing audio analysis tools for AI-driven sound recreation. It imports, separates, analyzes, and compares audio so an AI agent can configure hardware synthesizers to match a target sound.
